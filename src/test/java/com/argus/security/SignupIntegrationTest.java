@@ -42,6 +42,31 @@ class SignupIntegrationTest extends AbstractIntegrationTest {
         tenantRepository.deleteAll();
     }
 
+    /**
+     * The agent must be fetchable before anyone has an account — it is what you
+     * run to get events flowing. This shipped broken once: the static allowlist
+     * named exact paths and did not include /agent, so the download link on the
+     * setup page returned 401.
+     */
+    @Test
+    void agentIsDownloadableWithoutAuthentication() throws Exception {
+        mockMvc.perform(get("/agent/argus-agent.py"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void dashboardIsServedWithoutAuthentication() throws Exception {
+        mockMvc.perform(get("/")).andExpect(status().isOk());
+        mockMvc.perform(get("/app.js")).andExpect(status().isOk());
+    }
+
+    @Test
+    void managementStillRequiresAuthentication() throws Exception {
+        // Making static files public must not open the api.
+        mockMvc.perform(get("/v1/management/events")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/v1/management/api-keys")).andExpect(status().isUnauthorized());
+    }
+
     @Test
     void createsTenantAndAdminAndReturnsToken() throws Exception {
         mockMvc.perform(signup("Acme Ltd", "owner@acme.test", "supersecret1", "198.51.100.1"))

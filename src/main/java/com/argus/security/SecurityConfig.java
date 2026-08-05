@@ -53,6 +53,11 @@ public class SecurityConfig {
                         .requestMatchers("/", "/index.html", "/app.js", "/style.css",
                                 "/favicon.ico").permitAll()
 
+                        // The agent has to be fetchable before anyone has a key —
+                        // it is the thing you run to get events flowing. It is
+                        // also public source, so there is nothing to protect.
+                        .requestMatchers("/agent/**").permitAll()
+
                         // Machine endpoints authenticate with an API key in a
                         // servlet filter that runs ahead of this chain, so they
                         // are already authenticated by the time they arrive.
