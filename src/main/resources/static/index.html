@@ -25,45 +25,39 @@
 
     <section id="login-view">
         <div class="card login">
-            <h2>Sign in</h2>
-            <p class="muted">Read-only demo account.</p>
+            <div class="auth-toggle">
+                <button id="show-login" class="tab active">Sign in</button>
+                <button id="show-signup" class="tab">Create account</button>
+            </div>
+
             <form id="login-form">
-                <label>Email
-                    <input id="email" type="email" value="demo@argus.dev" required>
-                </label>
-                <label>Password
-                    <input id="password" type="password" value="demo1234" required>
-                </label>
+                <label>Email <input id="email" type="email" value="demo@argus.dev" required></label>
+                <label>Password <input id="password" type="password" value="demo1234" required></label>
                 <button type="submit" class="primary">Sign in</button>
+                <p class="muted small">
+                    Demo account is read-only. Create your own to add rules and
+                    connect an agent.
+                </p>
             </form>
-            <p id="login-error" class="error hidden"></p>
+
+            <form id="signup-form" class="hidden">
+                <label>Organisation <input id="s-org" required maxlength="120" placeholder="Acme Ltd"></label>
+                <label>Email <input id="s-email" type="email" required placeholder="you@example.com"></label>
+                <label>Password <input id="s-password" type="password" required minlength="8" placeholder="at least 8 characters"></label>
+                <button type="submit" class="primary">Create account</button>
+                <p class="muted small">
+                    Creates an isolated tenant. You become its administrator.
+                </p>
+            </form>
+
+            <p id="auth-error" class="error hidden"></p>
             <p class="muted small">
-                First request after idle takes ~60s — the free instance spins down
-                and the JVM has to start.
+                First request after idle takes ~60s — the free instance spins down.
             </p>
         </div>
     </section>
 
     <section id="app-view" class="hidden">
-
-        <div class="simulate card">
-            <div>
-                <h2>Generate traffic</h2>
-                <p class="muted small">
-                    These write real events through the same path an agent uses —
-                    persisted, published after commit, consumed, evaluated. The
-                    tables below poll every two seconds, so you can watch a rule
-                    fire.
-                </p>
-            </div>
-            <div class="sim-buttons">
-                <button class="primary" data-sim="brute-force">SSH brute force</button>
-                <button data-sim="escalation">Privilege escalation</button>
-                <button data-sim="noise">Routine noise</button>
-            </div>
-        </div>
-
-        <p id="sim-result" class="sim-result hidden"></p>
 
         <div class="stats">
             <div class="stat"><span id="stat-events">–</span><label>Events</label></div>
@@ -75,53 +69,115 @@
             <button class="tab active" data-tab="alerts">Alerts</button>
             <button class="tab" data-tab="events">Events</button>
             <button class="tab" data-tab="rules">Rules</button>
+            <button class="tab" data-tab="agent">Connect a machine</button>
         </nav>
 
         <div id="tab-alerts" class="panel">
+            <div class="simulate">
+                <p class="muted small">
+                    No agent yet? Generate traffic to watch the pipeline run.
+                </p>
+                <div class="sim-buttons">
+                    <button class="primary" data-sim="brute-force">SSH brute force</button>
+                    <button data-sim="escalation">Privilege escalation</button>
+                    <button data-sim="noise">Routine noise</button>
+                </div>
+            </div>
+            <p id="sim-result" class="sim-result hidden"></p>
             <table>
                 <thead>
-                <tr>
-                    <th>Severity</th><th>Status</th><th>Rule</th><th>Target</th>
-                    <th class="num">Count</th><th>First seen</th><th>Last seen</th><th></th>
-                </tr>
+                <tr><th>Severity</th><th>Status</th><th>Rule</th><th>Target</th>
+                    <th class="num">Count</th><th>First seen</th><th>Last seen</th><th></th></tr>
                 </thead>
                 <tbody id="alerts-body"></tbody>
             </table>
             <p class="muted small">
-                A burst folds into one alert whose count rises, rather than one
-                alert per event. Deduplication keys on rule plus actor, so two
-                accounts under attack stay separate.
+                A burst folds into one alert whose count rises. Deduplication keys
+                on rule plus actor, so two accounts under attack stay separate.
             </p>
         </div>
 
         <div id="tab-events" class="panel hidden">
             <table>
                 <thead>
-                <tr>
-                    <th>Severity</th><th>Source</th><th>Type</th>
-                    <th>Actor</th><th>Target</th><th>Occurred</th>
-                </tr>
+                <tr><th>Severity</th><th>Source</th><th>Type</th>
+                    <th>Actor</th><th>Target</th><th>Occurred</th></tr>
                 </thead>
                 <tbody id="events-body"></tbody>
             </table>
-            <p class="muted small">Newest first, scoped to your tenant.</p>
         </div>
 
         <div id="tab-rules" class="panel hidden">
+            <form id="rule-form" class="inline-form">
+                <input id="r-name" placeholder="Rule name" required maxlength="120">
+                <input id="r-source" placeholder="source (blank = any)">
+                <input id="r-type" placeholder="event type (blank = any)">
+                <select id="r-min">
+                    <option value="">any severity</option>
+                    <option>LOW</option><option selected>MEDIUM</option>
+                    <option>HIGH</option><option>CRITICAL</option>
+                </select>
+                <input id="r-threshold" type="number" min="1" value="5" title="threshold">
+                <input id="r-window" type="number" min="1" value="300" title="window (seconds)">
+                <select id="r-severity">
+                    <option>LOW</option><option>MEDIUM</option>
+                    <option>HIGH</option><option selected>CRITICAL</option>
+                </select>
+                <button type="submit" class="primary">Add rule</button>
+            </form>
             <table>
                 <thead>
-                <tr>
-                    <th>Name</th><th>Source</th><th>Event type</th>
+                <tr><th>Name</th><th>Source</th><th>Event type</th>
                     <th>Min severity</th><th class="num">Threshold</th>
-                    <th class="num">Window</th><th>Raises</th>
-                </tr>
+                    <th class="num">Window</th><th>Raises</th><th></th></tr>
                 </thead>
                 <tbody id="rules-body"></tbody>
             </table>
             <p class="muted small">
-                A rule fires when its threshold is met inside a rolling window,
-                counted per actor.
+                Fires when the threshold is met inside a rolling window, counted
+                per actor. Blank fields match anything.
             </p>
+        </div>
+
+        <div id="tab-agent" class="panel hidden">
+            <div class="setup">
+                <h3>1. Create an API key</h3>
+                <form id="key-form" class="inline-form">
+                    <input id="k-name" placeholder="e.g. web-server-1" required maxlength="120">
+                    <button type="submit" class="primary">Issue key</button>
+                </form>
+                <p id="new-key" class="sim-result hidden"></p>
+
+                <table>
+                    <thead><tr><th>Name</th><th>Created</th><th>Last used</th><th>Status</th><th></th></tr></thead>
+                    <tbody id="keys-body"></tbody>
+                </table>
+
+                <h3>2. Run the agent on your machine</h3>
+                <p class="muted small">
+                    Single Python file, standard library only. Reads your logs and
+                    ships matching lines — failed SSH logins, sudo escalations,
+                    new sessions.
+                </p>
+                <pre><code># download
+curl -O <span class="host"></span>/agent/argus-agent.py
+
+# check connectivity (sends one event)
+export ARGUS_API_KEY=&lt;your key&gt;
+python3 argus-agent.py --test
+
+# then tail your auth log
+sudo -E python3 argus-agent.py --follow /var/log/auth.log
+
+# or on a systemd host
+journalctl -f | python3 argus-agent.py --stdin</code></pre>
+                <p class="muted small">
+                    Events appear on the Events tab within a second or two;
+                    matching rules raise alerts shortly after.
+                    <a href="/agent/argus-agent.py">Read the source</a> — it is
+                    about 200 lines, and you should read anything you run as root.
+                </p>
+            </div>
         </div>
 
     </section>

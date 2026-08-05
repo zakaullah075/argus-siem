@@ -218,3 +218,56 @@ footer a:hover { text-decoration: underline; }
 
 tbody tr { transition: background .4s ease; }
 tbody tr:hover { background: rgba(255,255,255,.02); }
+
+/* --- setup, forms, keys --- */
+
+.auth-toggle { display: flex; gap: 6px; margin-bottom: 4px; }
+
+.inline-form {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 14px;
+    margin: 0 0 8px;
+    border-bottom: 1px solid var(--line);
+}
+.inline-form input, .inline-form select { flex: 1 1 130px; min-width: 110px; }
+.inline-form input[type=number] { flex: 0 0 88px; }
+.inline-form button { flex: 0 0 auto; }
+
+.setup { padding: 18px 14px 8px; }
+.setup h3 { font-size: 14px; margin: 22px 0 10px; letter-spacing: -0.01em; }
+.setup h3:first-child { margin-top: 0; }
+
+pre {
+    background: #0b0e13;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 12.5px;
+    line-height: 1.7;
+}
+pre code { color: #b9c6d3; }
+
+code.key {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 6px 9px;
+    background: #0b0e13;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    color: var(--low);
+    word-break: break-all;
+}
+
+select {
+    background: #0b0e13;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 9px 11px;
+    color: var(--text);
+    font-size: 14px;
+}

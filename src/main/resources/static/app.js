@@ -29,7 +29,7 @@ async function signIn(event) {
     event.preventDefault();
 
     const button = event.target.querySelector('button');
-    const error = $('login-error');
+    const error = $('auth-error');
 
     button.disabled = true;
     button.textContent = 'Signing in…';
@@ -50,13 +50,7 @@ async function signIn(event) {
         token = session.token;
         role = session.role;
 
-        $('login-view').classList.add('hidden');
-        $('app-view').classList.remove('hidden');
-        $('session').classList.remove('hidden');
-        $('who').textContent = `${$('email').value} · ${role}`;
-
-        await refresh();
-        startPolling();
+        enterApp($('email').value);
     } catch (e) {
         error.textContent = e.message;
         error.classList.remove('hidden');
@@ -187,7 +181,7 @@ function renderEvents(events) {
 
 function renderRules(rules) {
     const body = $('rules-body');
-    body.innerHTML = rules.length ? '' : row(7, 'No rules configured.');
+    body.innerHTML = rules.length ? '' : row(8, 'No rules configured.');
 
     for (const rule of rules) {
         const tr = document.createElement('tr');
@@ -199,9 +193,19 @@ function renderRules(rules) {
                     ? `<span class="sev ${rule.minSeverity}">${rule.minSeverity}</span>` : 'any'}</td>
             <td class="num">${rule.thresholdCount}</td>
             <td class="num">${rule.windowSeconds}s</td>
-            <td><span class="sev ${rule.alertSeverity}">${rule.alertSeverity}</span></td>`;
+            <td><span class="sev ${rule.alertSeverity}">${rule.alertSeverity}</span></td>
+            <td>${role === 'ADMIN' ? `<button class="ghost" data-disable="${rule.id}">Remove</button>` : ''}</td>`;
         body.appendChild(tr);
     }
+
+    body.querySelectorAll('[data-disable]').forEach(b => {
+        b.addEventListener('click', async () => {
+            await fetch(`/v1/management/rules/${b.dataset.disable}`, {
+                method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
+            });
+            await refresh();
+        });
+    });
 }
 
 const row = (cols, text) => `<tr><td colspan="${cols}" class="muted">${text}</td></tr>`;
@@ -223,8 +227,126 @@ function escape(value) {
     return div.innerHTML;
 }
 
+async function signUp(event) {
+    event.preventDefault();
+    const button = event.target.querySelector('button');
+    const error = $('auth-error');
+    button.disabled = true; button.textContent = 'Creating…';
+    error.classList.add('hidden');
+
+    try {
+        const response = await fetch('/v1/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                organisation: $('s-org').value,
+                email: $('s-email').value,
+                password: $('s-password').value
+            })
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || 'Could not create account');
+
+        token = payload.token;
+        role = payload.role;
+        enterApp($('s-email').value);
+    } catch (e) {
+        error.textContent = e.message;
+        error.classList.remove('hidden');
+    } finally {
+        button.disabled = false; button.textContent = 'Create account';
+    }
+}
+
+async function issueKey(event) {
+    event.preventDefault();
+    const result = await api('/v1/management/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: $('k-name').value })
+    });
+    const banner = $('new-key');
+    banner.innerHTML = `<strong>Copy this now — it is not shown again.</strong><br>` +
+        `<code class="key">${escape(result.apiKey)}</code>`;
+    banner.classList.remove('hidden');
+    $('k-name').value = '';
+    await refreshKeys();
+}
+
+async function createRule(event) {
+    event.preventDefault();
+    await api('/v1/management/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            name: $('r-name').value,
+            matchSource: $('r-source').value || null,
+            matchEventType: $('r-type').value || null,
+            minSeverity: $('r-min').value || null,
+            thresholdCount: Number($('r-threshold').value),
+            windowSeconds: Number($('r-window').value),
+            alertSeverity: $('r-severity').value
+        })
+    });
+    $('r-name').value = ''; $('r-source').value = ''; $('r-type').value = '';
+    await refresh();
+}
+
+async function refreshKeys() {
+    const keys = await api('/v1/management/api-keys');
+    const body = $('keys-body');
+    body.innerHTML = keys.length ? '' : row(5, 'No keys yet.');
+
+    for (const key of keys) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${escape(key.name)}</td>
+            <td class="muted">${ago(key.createdAt)}</td>
+            <td class="muted">${key.lastUsedAt ? ago(key.lastUsedAt) : 'never'}</td>
+            <td>${key.revoked ? '<span class="muted">revoked</span>'
+                              : '<span class="status OPEN">active</span>'}</td>
+            <td>${key.revoked ? '' : `<button class="ghost" data-revoke="${key.id}">Revoke</button>`}</td>`;
+        body.appendChild(tr);
+    }
+
+    body.querySelectorAll('[data-revoke]').forEach(b => {
+        b.addEventListener('click', async () => {
+            await fetch(`/v1/management/api-keys/${b.dataset.revoke}`, {
+                method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
+            });
+            await refreshKeys();
+        });
+    });
+}
+
+function enterApp(email) {
+    $('login-view').classList.add('hidden');
+    $('app-view').classList.remove('hidden');
+    $('session').classList.remove('hidden');
+    $('who').textContent = `${email} · ${role}`;
+    document.querySelectorAll('.host').forEach(el => el.textContent = location.origin);
+    refresh().then(() => refreshKeys()).catch(() => {});
+    startPolling();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     $('login-form').addEventListener('submit', signIn);
+    $('signup-form').addEventListener('submit', signUp);
+    $('key-form').addEventListener('submit', issueKey);
+    $('rule-form').addEventListener('submit', createRule);
+
+    $('show-login').addEventListener('click', () => {
+        $('login-form').classList.remove('hidden');
+        $('signup-form').classList.add('hidden');
+        $('show-login').classList.add('active');
+        $('show-signup').classList.remove('active');
+    });
+    $('show-signup').addEventListener('click', () => {
+        $('signup-form').classList.remove('hidden');
+        $('login-form').classList.add('hidden');
+        $('show-signup').classList.add('active');
+        $('show-login').classList.remove('active');
+    });
     $('logout').addEventListener('click', signOut);
 
     document.querySelectorAll('[data-sim]').forEach(button => {

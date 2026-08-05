@@ -38,7 +38,29 @@ Spring Boot 3.5 · Java 21 · PostgreSQL · RabbitMQ
 "five failed logins in five minutes" is one rule, and a burst produces one alert
 that keeps counting rather than one alert per event.
 
-## Running it
+## Use it
+
+**https://argus-siem.onrender.com**
+
+Create an account, issue an API key, and point the agent at a machine:
+
+```bash
+curl -O https://argus-siem.onrender.com/agent/argus-agent.py
+
+export ARGUS_API_KEY=<the key you were shown once>
+python3 argus-agent.py --test                       # prove connectivity
+
+sudo -E python3 argus-agent.py --follow /var/log/auth.log
+```
+
+Fail an SSH login a few times and an alert appears on the dashboard. The agent is
+a single standard-library Python file — no install, ~200 lines, and worth reading
+before you run anything as root.
+
+There is also a read-only demo account (`demo@argus.dev` / `demo1234`) with
+buttons that generate traffic, for looking around without connecting a machine.
+
+## Running it locally
 
 Requires Java 21 and Docker.
 
@@ -52,29 +74,25 @@ Flyway creates the schema on first start.
 ### Walking through it
 
 ```bash
-# 1. Create a tenant and an admin (no bootstrap endpoint yet)
-docker exec -it argus-postgres psql -U argus -d argus -c "
-  insert into tenant (id, name, plan, rate_limit_per_minute)
-  values ('11111111-1111-1111-1111-111111111111','Acme','free',600);"
-
-# 2. Log in for a JWT
-TOKEN=$(curl -s -X POST localhost:8080/v1/auth/login \
+# 1. Create a tenant — you become its administrator
+TOKEN=$(curl -s -X POST localhost:8080/v1/auth/signup \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@acme.test","password":"..."}' | jq -r .token)
+  -d '{"organisation":"Acme","email":"you@acme.test","password":"supersecret1"}' \
+  | jq -r .token)
 
-# 3. Issue an API key for an agent — shown once, never recoverable
+# 2. Issue an API key for an agent — shown once, never recoverable
 KEY=$(curl -s -X POST localhost:8080/v1/management/api-keys \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"agent-1"}' | jq -r .apiKey)
 
-# 4. Create a detection rule
+# 3. Create a detection rule
 curl -X POST localhost:8080/v1/management/rules \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"brute force","matchSource":"sshd","matchEventType":"auth.failed",
        "minSeverity":"MEDIUM","thresholdCount":5,"windowSeconds":300,
        "alertSeverity":"CRITICAL"}'
 
-# 5. Ship an event
+# 4. Ship an event
 curl -X POST localhost:8080/v1/events -H "X-Api-Key: $KEY" \
   -H 'Content-Type: application/json' \
   -d '{"id":"aaaaaaaa-0000-0000-0000-000000000001","source":"sshd",
@@ -82,7 +100,7 @@ curl -X POST localhost:8080/v1/events -H "X-Api-Key: $KEY" \
        "target":"10.0.0.5","payload":{"attempts":5},
        "occurredAt":"2026-08-05T01:30:00Z"}'
 
-# 6. Read alerts
+# 5. Read alerts
 curl localhost:8080/v1/alerts -H "X-Api-Key: $KEY"
 ```
 
@@ -96,10 +114,17 @@ second row.
 | POST | `/v1/events` | API key | `202`, idempotent on client-supplied id |
 | GET | `/v1/events` | API key | Paginated, tenant-scoped |
 | GET | `/v1/alerts` | API key | Paginated, newest first |
+| POST | `/v1/auth/signup` | — | Creates a tenant, returns a JWT. Rate limited per IP. |
 | POST | `/v1/auth/login` | — | Returns a JWT |
 | POST | `/v1/management/rules` | JWT, ADMIN | |
 | GET | `/v1/management/rules` | JWT, any role | |
 | POST | `/v1/management/api-keys` | JWT, ADMIN | Key shown once |
+| GET | `/v1/management/api-keys` | JWT, any role | Never returns the hash |
+| DELETE | `/v1/management/api-keys/{id}` | JWT, ADMIN | Revokes immediately |
+| DELETE | `/v1/management/rules/{id}` | JWT, ADMIN | Soft delete — alerts reference the rule |
+| GET | `/v1/management/events` | JWT, any role | Same data as `/v1/events`, for humans |
+| POST | `/v1/management/alerts/{id}/acknowledge` | JWT, ANALYST+ | |
+| POST | `/v1/management/alerts/{id}/resolve` | JWT, ANALYST+ | |
 | GET | `/actuator/health` `/actuator/prometheus` | — / — | |
 
 Roles: **ADMIN** manages everything · **ANALYST** works alerts · **VIEWER** reads.
@@ -110,7 +135,7 @@ Roles: **ADMIN** manages everything · **ANALYST** works alerts · **VIEWER** re
 ./mvnw test
 ```
 
-Roughly 50 tests across three levels:
+Around 90 tests across three levels:
 
 - **Unit** — detection matching, windowing, dedupe keys, key hashing, rate
   limiting. No Spring, no database, milliseconds.
@@ -176,7 +201,26 @@ Stated rather than hidden:
 - **Tenant rate limits are cached without invalidation** — a change takes effect
   on restart.
 
+## The agent
+
+`src/main/resources/static/agent/argus-agent.py` — standard library only, so it
+runs anywhere with Python 3.8+.
+
+It matches six patterns out of syslog: failed passwords, invalid users, accepted
+logins, sudo escalation, session opens, and PAM failures. Everything else is
+ignored.
+
+Two details worth knowing:
+
+**It generates the event id itself.** A retry after a timeout resends the same
+id, and the server treats it as a duplicate rather than recording the event
+twice — which is what the idempotent ingest API exists for.
+
+**It reopens the file when the inode changes.** Without that, log rotation leaves
+the agent holding a handle to a file nobody writes to any more: it goes quiet and
+never reports an error.
+
 ## Not built
 
-No UI beyond the API. No machine-learning anomaly detection — rules only. No
+No UI beyond the dashboard. No machine-learning anomaly detection — rules only. No
 log-shipping agents; HTTP ingest only. No billing or signup.
