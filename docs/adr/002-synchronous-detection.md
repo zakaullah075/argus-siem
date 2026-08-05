@@ -1,6 +1,6 @@
 # ADR 002 — Detection runs synchronously, for now
 
-**Status:** accepted, expected to be superseded
+**Status:** superseded by [005](005-async-detection-pipeline.md)
 
 ## Context
 

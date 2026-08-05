@@ -1,70 +1,108 @@
 # Argus
 
 A multi-tenant security event platform. Agents and applications push security
-events over an authenticated API; Argus validates, stores and (from Phase 2)
-evaluates detection rules against the stream to raise alerts.
+events over an authenticated API; Argus normalises them, evaluates detection
+rules against the stream, and raises deduplicated alerts.
 
-## Architecture
+Spring Boot 3.5 · Java 21 · PostgreSQL · RabbitMQ
+
+---
+
+## What it does
 
 ```
    agents / apps
-        │  POST /v1/events        X-Api-Key header
+        │  POST /v1/events            X-Api-Key
         ▼
  ┌──────────────────┐
- │  Ingest API      │  authenticate → validate → persist → 202 Accepted
- └────────┬─────────┘
+ │  Ingest API      │  authenticate → rate limit → validate → persist → 202
+ └────────┬─────────┘         (returns before rules are evaluated)
+          │  publish, after the transaction commits
           ▼
-     ┌──────────┐
-     │ Postgres │   tenants, api keys, events (raw payload as jsonb)
-     └──────────┘
+     ┌──────────┐         ┌──────────────┐
+     │ RabbitMQ │────────►│  Detection   │  match rules → count in window
+     └────┬─────┘         │  consumer    │  → raise or fold alert
+          │               └──────┬───────┘
+          ▼ retries exhausted    │
+     ┌──────────┐                ▼
+     │   DLQ    │          ┌──────────┐
+     └──────────┘          │  Alerts  │  deduplicated per rule + actor
+                           └──────────┘
+
+ ┌──────────────────┐
+ │ Management API   │  rules, api keys      JWT + RBAC, audit logged
+ └──────────────────┘
 ```
 
-Planned: async processing via RabbitMQ, a rule engine, alert deduplication, and
-a JWT-authenticated management API. See `docs/` for the full spec.
+**A rule fires when N matching events land inside a rolling window.** So
+"five failed logins in five minutes" is one rule, and a burst produces one alert
+that keeps counting rather than one alert per event.
 
 ## Running it
 
 Requires Java 21 and Docker.
 
 ```bash
-docker compose up -d          # Postgres on localhost:5433
-./mvnw spring-boot:run        # application on localhost:8080
+docker compose up -d          # Postgres on 5433, RabbitMQ on 5672
+./mvnw spring-boot:run        # application on 8080
 ```
 
 Flyway creates the schema on first start.
 
-### Creating a tenant and key
-
-There is no management API yet, so seed one directly:
-
-```sql
-insert into tenant (id, name, plan, rate_limit_per_minute)
-values ('11111111-1111-1111-1111-111111111111', 'Acme Corp', 'free', 600);
-```
-
-Then issue a key through `ApiKeyService.issue(tenantId, name)`. The plaintext key
-is returned once and never stored — only its SHA-256 hash is kept.
-
-### Sending an event
+### Walking through it
 
 ```bash
-curl -X POST http://localhost:8080/v1/events \
-  -H "X-Api-Key: $ARGUS_API_KEY" \
+# 1. Create a tenant and an admin (no bootstrap endpoint yet)
+docker exec -it argus-postgres psql -U argus -d argus -c "
+  insert into tenant (id, name, plan, rate_limit_per_minute)
+  values ('11111111-1111-1111-1111-111111111111','Acme','free',600);"
+
+# 2. Log in for a JWT
+TOKEN=$(curl -s -X POST localhost:8080/v1/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{
-        "id": "aaaaaaaa-0000-0000-0000-000000000001",
-        "source": "sshd",
-        "eventType": "auth.failed",
-        "severity": "HIGH",
-        "actor": "root",
-        "target": "10.0.0.5",
-        "payload": {"attempts": 5, "port": 22},
-        "occurredAt": "2026-08-05T01:30:00Z"
-      }'
+  -d '{"email":"admin@acme.test","password":"..."}' | jq -r .token)
+
+# 3. Issue an API key for an agent — shown once, never recoverable
+KEY=$(curl -s -X POST localhost:8080/v1/management/api-keys \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"agent-1"}' | jq -r .apiKey)
+
+# 4. Create a detection rule
+curl -X POST localhost:8080/v1/management/rules \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"brute force","matchSource":"sshd","matchEventType":"auth.failed",
+       "minSeverity":"MEDIUM","thresholdCount":5,"windowSeconds":300,
+       "alertSeverity":"CRITICAL"}'
+
+# 5. Ship an event
+curl -X POST localhost:8080/v1/events -H "X-Api-Key: $KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"id":"aaaaaaaa-0000-0000-0000-000000000001","source":"sshd",
+       "eventType":"auth.failed","severity":"HIGH","actor":"root",
+       "target":"10.0.0.5","payload":{"attempts":5},
+       "occurredAt":"2026-08-05T01:30:00Z"}'
+
+# 6. Read alerts
+curl localhost:8080/v1/alerts -H "X-Api-Key: $KEY"
 ```
 
-Response is `202 Accepted`. Resending the same `id` returns `"duplicate": true`
-and does not create a second row.
+Resending the same event `id` returns `"duplicate": true` and does not create a
+second row.
+
+## API
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| POST | `/v1/events` | API key | `202`, idempotent on client-supplied id |
+| GET | `/v1/events` | API key | Paginated, tenant-scoped |
+| GET | `/v1/alerts` | API key | Paginated, newest first |
+| POST | `/v1/auth/login` | — | Returns a JWT |
+| POST | `/v1/management/rules` | JWT, ADMIN | |
+| GET | `/v1/management/rules` | JWT, any role | |
+| POST | `/v1/management/api-keys` | JWT, ADMIN | Key shown once |
+| GET | `/actuator/health` `/actuator/prometheus` | — / — | |
+
+Roles: **ADMIN** manages everything · **ANALYST** works alerts · **VIEWER** reads.
 
 ## Tests
 
@@ -72,34 +110,73 @@ and does not create a second row.
 ./mvnw test
 ```
 
-Integration tests run against a real Postgres started by Testcontainers, not an
-in-memory database — H2 would not enforce the `jsonb` column, the severity check
-constraint, or the unique index, so it could pass while production failed.
+Roughly 50 tests across three levels:
+
+- **Unit** — detection matching, windowing, dedupe keys, key hashing, rate
+  limiting. No Spring, no database, milliseconds.
+- **Architecture** — ArchUnit rules that fail the build if a controller reaches a
+  repository, an entity leaks through an endpoint, field injection appears, or a
+  cycle forms between feature packages.
+- **Integration** — Testcontainers, real Postgres and real RabbitMQ. H2 would not
+  enforce the `jsonb` column, the severity check constraint or the unique index,
+  so it could pass while production failed.
+
+Detection assertions poll, because evaluation happens in a consumer. Where a test
+proves something did *not* happen, it waits for the queue to drain first —
+otherwise it would pass simply by checking too early.
 
 ## Design decisions
 
+Fuller versions, including the alternatives rejected, are in [docs/adr](docs/adr).
+
 **Flyway owns the schema; Hibernate is `ddl-auto: validate`.** Hibernate only
-checks that the entities match what the migrations produced. Letting it alter a
-schema is how production drifts away from source control.
+checks the entities match what migrations produced. It caught a real `char(64)`
+vs `varchar` mismatch on first boot.
 
-**Client-supplied event IDs.** The primary key is the idempotency guarantee — a
-retrying agent resends the same ID and collides instead of duplicating.
+**The primary key is the idempotency guarantee.** Clients supply the event id, so
+a retrying agent collides instead of duplicating.
 
-**SHA-256 for API keys, not BCrypt.** Keys are 256 bits of random data, so there
-is no dictionary to attack and no need for a deliberately slow hash. This runs on
-every request, where BCrypt's cost would be the bottleneck. Passwords are the
-opposite case and require BCrypt.
+**Two authentication schemes.** API keys for machines (SHA-256: 256 random bits
+need no slow hash, and this runs on every request). BCrypt for passwords
+(low-entropy and human-chosen, so slow is the point).
 
-**Raw payloads stored verbatim as `jsonb`.** Normalisation is lossy; when a
-detection rule misfires, the original event is the only way to find out why.
+**Publishing happens after commit, not inside the transaction.** A rollback must
+not announce an event that was never stored. The reverse gap — a crash between
+commit and publish — is real and needs a transactional outbox to close; that is
+noted in the code rather than pretended away.
 
-**The tenant comes from the API key, never the request body.** A caller must not
-be able to write into another tenant by naming it.
+**Alert deduplication keys on rule + actor.** Once a burst trips a threshold,
+every later event trips it too. Without folding, one brute-force attempt produces
+hundreds of identical alerts, and analysts learn to ignore the system.
 
-## Status
+**Severity is matched against an explicit set, not `>=`.** The column stores enum
+names, so a relational comparison would order them alphabetically —
+`CRITICAL < HIGH < LOW < MEDIUM`. Wrong, and silently so.
 
-Phase 1 complete: schema, API key authentication, tenant isolation, validated
-idempotent ingest, paginated queries, integration tests.
+**Packaging is by feature, not by layer.** `ingest/`, `rules/`, `alerts/` rather
+than `controller/`, `service/`, `repository/`. A change stays in one folder, and
+the structure describes what the system does rather than which framework it uses.
 
-Not yet built: async pipeline, rule engine, alerting, management API, rate
-limiting, metrics dashboards.
+## Known limitations
+
+Stated rather than hidden:
+
+- **No transactional outbox.** A crash between commit and publish leaves an event
+  stored but unevaluated.
+- **Rate limiting is per instance.** In-memory counters mean two instances allow
+  roughly twice the configured rate. The fixed window also permits a burst across
+  the boundary.
+- **Tenant isolation is enforced in queries, not by the database.** Postgres
+  row-level security would make a forgotten predicate fail closed instead of
+  leaking. Covered by a test; not yet enforced structurally.
+- **One count query per matching rule, per event.** Fine at a handful of rules per
+  tenant; at hundreds this becomes the bottleneck and should move to rolling
+  counters in Redis.
+- **JWTs cannot be revoked before expiry.** One hour is the exposure window.
+- **Tenant rate limits are cached without invalidation** — a change takes effect
+  on restart.
+
+## Not built
+
+No UI beyond the API. No machine-learning anomaly detection — rules only. No
+log-shipping agents; HTTP ingest only. No billing or signup.
