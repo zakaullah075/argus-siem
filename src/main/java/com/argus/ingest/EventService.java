@@ -1,6 +1,7 @@
 package com.argus.ingest;
 
 import com.argus.ingest.dto.EventResponse;
+import com.argus.rules.DetectionService;
 import com.argus.ingest.dto.IngestEventRequest;
 import com.argus.ingest.dto.IngestEventResponse;
 import org.springframework.data.domain.Page;
@@ -14,9 +15,11 @@ import java.util.UUID;
 public class EventService {
 
     private final EventRepository eventRepository;
+    private final DetectionService detectionService;
 
-    public EventService(EventRepository eventRepository) {
+    public EventService(EventRepository eventRepository, DetectionService detectionService) {
         this.eventRepository = eventRepository;
+        this.detectionService = detectionService;
     }
 
     @Transactional
@@ -47,6 +50,12 @@ public class EventService {
         );
 
         eventRepository.save(event);
+
+        // Synchronous for now, so the caller waits for rule evaluation. That is
+        // acceptable while rules are few, and is the first thing to move off the
+        // request path when ingest volume grows.
+        detectionService.evaluate(event);
+
         return new IngestEventResponse(eventId, false);
     }
 
