@@ -35,11 +35,9 @@ forever and blocks everything behind it, which looks identical to an outage.
 
 ## Consequences
 
-**The dual-write window is narrowed, not closed.** If the process dies between
-commit and publish, the event is stored and never evaluated. Closing this
-properly needs a transactional outbox — write the message to a table in the same
-transaction, have a relay publish it. Not built. The exposure is a narrow window
-and the events remain queryable, just not alerted on.
+**The dual-write window was narrowed, not closed** — and has since been closed
+by [ADR 007](007-transactional-outbox.md). At the time of this decision a crash
+between commit and publish left an event stored and never evaluated.
 
 **Publish failures are logged, not thrown.** The event is already committed;
 failing the request would tell the caller to retry something that succeeded,

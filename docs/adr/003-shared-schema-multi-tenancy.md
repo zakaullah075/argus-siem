@@ -37,10 +37,10 @@ the wrong ones, and no test that checks "did I get data back" would catch it.
 Mitigations in place: a test that ingests events for two tenants and asserts each
 sees exactly one, and the rule that the tenant is never taken from client input.
 
-Not in place: database-level enforcement. Postgres row-level security would make
-a forgotten predicate fail closed rather than leak, and is the right next step if
-this ever holds real customer data. Hibernate filters would be a weaker version
-of the same idea, since they can be bypassed by native queries.
+Now also in place: Postgres row-level security, added in
+[ADR 008](008-row-level-security.md). A forgotten predicate fails closed instead
+of leaking. Hibernate filters were rejected as a weaker version of the same idea,
+since native queries bypass them.
 
 Accepted risk: shared infrastructure means one tenant's ingest volume can affect
 another's latency. Per-tenant rate limiting exists in the schema
