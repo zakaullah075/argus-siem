@@ -1,17 +1,22 @@
 package com.argus.management;
 
 import com.argus.apikey.ApiKeyService;
+import com.argus.apikey.ApiKeyView;
 import com.argus.audit.AuditService;
 import com.argus.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -42,6 +47,18 @@ public class ApiKeyManagementController {
 
         return new IssuedKeyResponse(plaintext,
                 "Store this now. It cannot be retrieved again.");
+    }
+
+    @GetMapping
+    public List<ApiKeyView> list() {
+        return apiKeyService.listForTenant(AuthenticatedUser.tenantId());
+    }
+
+    @DeleteMapping("/{keyId}")
+    public void revoke(@PathVariable UUID keyId) {
+        UUID tenantId = AuthenticatedUser.tenantId();
+        apiKeyService.revoke(tenantId, keyId);
+        auditService.record(tenantId, AuthenticatedUser.userId(), "apikey.revoked", keyId.toString());
     }
 
     public record IssueKeyRequest(@NotBlank String name) {

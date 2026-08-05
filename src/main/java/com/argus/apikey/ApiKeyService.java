@@ -1,5 +1,6 @@
 package com.argus.apikey;
 
+import com.argus.common.NotFoundException;
 import com.argus.common.UnauthorizedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,6 +10,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.List;
 import java.util.HexFormat;
 import java.util.UUID;
 
@@ -38,6 +40,25 @@ public class ApiKeyService {
 
         apiKeyRepository.save(new ApiKey(tenantId, hash(plaintext), name));
         return plaintext;
+    }
+
+    @Transactional(readOnly = true)
+    public List<ApiKeyView> listForTenant(UUID tenantId) {
+        return apiKeyRepository.findByTenantIdOrderByCreatedAtDesc(tenantId)
+                .stream()
+                .map(ApiKeyView::from)
+                .toList();
+    }
+
+    /**
+     * Revocation is immediate — the next request with this key fails, because
+     * authentication checks the flag rather than trusting a cache.
+     */
+    @Transactional
+    public void revoke(UUID tenantId, UUID keyId) {
+        ApiKey key = apiKeyRepository.findByIdAndTenantId(keyId, tenantId)
+                .orElseThrow(() -> new NotFoundException("API key", keyId));
+        key.revoke();
     }
 
     @Transactional

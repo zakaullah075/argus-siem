@@ -1,5 +1,6 @@
 package com.argus.rules;
 
+import com.argus.common.NotFoundException;
 import com.argus.rules.dto.CreateRuleCommand;
 import com.argus.rules.dto.RuleView;
 import org.springframework.stereotype.Service;
@@ -36,6 +37,18 @@ public class RuleService {
         ));
 
         return RuleView.from(rule);
+    }
+
+    /**
+     * Soft delete by disabling. Alerts carry a foreign key to the rule that
+     * raised them, so removing the row would either cascade away history or
+     * fail — and an analyst still needs to know what fired last week.
+     */
+    @Transactional
+    public void disable(UUID tenantId, UUID ruleId) {
+        Rule rule = ruleRepository.findByIdAndTenantId(ruleId, tenantId)
+                .orElseThrow(() -> new NotFoundException("Rule", ruleId));
+        rule.disable();
     }
 
     @Transactional(readOnly = true)

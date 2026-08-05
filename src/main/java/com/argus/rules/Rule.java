@@ -91,6 +91,10 @@ public class Rule {
         return minSeverity == null || severity.ordinal() >= minSeverity.ordinal();
     }
 
+    public void disable() {
+        this.enabled = false;
+    }
+
     public UUID getId() {
         return id;
     }
