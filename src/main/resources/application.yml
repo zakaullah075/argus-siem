@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: argus
+
+  datasource:
+    url: jdbc:postgresql://localhost:5433/argus
+    username: argus
+    password: argus_local_dev
+
+  jpa:
+    hibernate:
+      # Flyway owns the schema. Hibernate only validates that the entities
+      # match what the migrations produced.
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+server:
+  port: 8080
