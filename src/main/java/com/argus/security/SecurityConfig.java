@@ -47,6 +47,12 @@ public class SecurityConfig {
                         .requestMatchers("/v1/auth/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
 
+                        // The dashboard is a static page that authenticates from
+                        // the browser; serving the HTML reveals nothing, since
+                        // every call it makes still needs a token.
+                        .requestMatchers("/", "/index.html", "/app.js", "/style.css",
+                                "/favicon.ico").permitAll()
+
                         // Machine endpoints authenticate with an API key in a
                         // servlet filter that runs ahead of this chain, so they
                         // are already authenticated by the time they arrive.
