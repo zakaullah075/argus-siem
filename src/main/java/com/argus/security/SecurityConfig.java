@@ -52,10 +52,18 @@ public class SecurityConfig {
                         // are already authenticated by the time they arrive.
                         .requestMatchers("/v1/events/**", "/v1/alerts/**").permitAll()
 
-                        // Writes are admin-only; reads are open to any role, since
-                        // VIEWER exists precisely to read without changing anything.
-                        // Matchers are evaluated in order, so the write rules must
-                        // come first or the read rule would swallow them.
+                        // Alert triage is the analyst's job, so it is carved out
+                        // ahead of the admin-only write rule. Matchers are
+                        // evaluated in order and the first match wins, so a
+                        // narrower rule placed after a broader one never applies.
+                        .requestMatchers(HttpMethod.POST, "/v1/management/alerts/*/acknowledge")
+                        .hasAnyRole("ADMIN", "ANALYST")
+                        .requestMatchers(HttpMethod.POST, "/v1/management/alerts/*/resolve")
+                        .hasAnyRole("ADMIN", "ANALYST")
+
+                        // Other writes are admin-only; reads are open to any role,
+                        // since VIEWER exists precisely to read without changing
+                        // anything.
                         .requestMatchers(HttpMethod.POST, "/v1/management/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/v1/management/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/v1/management/**").hasRole("ADMIN")
