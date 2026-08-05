@@ -1,7 +1,7 @@
 package com.argus.alerts;
 
 import com.argus.alerts.dto.AlertResponse;
-import com.argus.common.NotFoundException;
+import com.argus.alerts.exception.AlertNotFoundException;
 import com.argus.common.Severity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,9 +18,11 @@ public class AlertService {
     private static final Logger log = LoggerFactory.getLogger(AlertService.class);
 
     private final AlertRepository alertRepository;
+    private final AlertMapper alertMapper;
 
-    public AlertService(AlertRepository alertRepository) {
+    public AlertService(AlertRepository alertRepository, AlertMapper alertMapper) {
         this.alertRepository = alertRepository;
+        this.alertMapper = alertMapper;
     }
 
     /**
@@ -54,23 +56,23 @@ public class AlertService {
     public AlertResponse acknowledge(UUID tenantId, UUID alertId) {
         Alert alert = requireOwnedAlert(tenantId, alertId);
         alert.acknowledge();
-        return AlertResponse.from(alert);
+        return alertMapper.toResponse(alert);
     }
 
     @Transactional
     public AlertResponse resolve(UUID tenantId, UUID alertId) {
         Alert alert = requireOwnedAlert(tenantId, alertId);
         alert.resolve();
-        return AlertResponse.from(alert);
+        return alertMapper.toResponse(alert);
     }
 
     private Alert requireOwnedAlert(UUID tenantId, UUID alertId) {
         return alertRepository.findByIdAndTenantId(alertId, tenantId)
-                .orElseThrow(() -> new NotFoundException("Alert", alertId));
+                .orElseThrow(() -> new AlertNotFoundException(alertId));
     }
 
     @Transactional(readOnly = true)
     public Page<AlertResponse> findForTenant(UUID tenantId, Pageable pageable) {
-        return alertRepository.findByTenantId(tenantId, pageable).map(AlertResponse::from);
+        return alertRepository.findByTenantId(tenantId, pageable).map(alertMapper::toResponse);
     }
 }

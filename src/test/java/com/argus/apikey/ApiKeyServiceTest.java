@@ -1,11 +1,12 @@
 package com.argus.apikey;
 
-import com.argus.common.UnauthorizedException;
+import com.argus.apikey.exception.InvalidApiKeyException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
@@ -25,6 +26,9 @@ class ApiKeyServiceTest {
 
     @Mock
     private ApiKeyRepository apiKeyRepository;
+
+    @Spy
+    private ApiKeyMapper apiKeyMapper;
 
     @InjectMocks
     private ApiKeyService apiKeyService;
@@ -62,13 +66,13 @@ class ApiKeyServiceTest {
     @Test
     void rejectsNullKey() {
         assertThatThrownBy(() -> apiKeyService.authenticate(null))
-                .isInstanceOf(UnauthorizedException.class);
+                .isInstanceOf(InvalidApiKeyException.class);
     }
 
     @Test
     void rejectsBlankKey() {
         assertThatThrownBy(() -> apiKeyService.authenticate("   "))
-                .isInstanceOf(UnauthorizedException.class);
+                .isInstanceOf(InvalidApiKeyException.class);
     }
 
     @Test
@@ -76,7 +80,7 @@ class ApiKeyServiceTest {
         when(apiKeyRepository.findByKeyHash(anyString())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> apiKeyService.authenticate("argus_nope"))
-                .isInstanceOf(UnauthorizedException.class)
+                .isInstanceOf(InvalidApiKeyException.class)
                 .hasMessage("Invalid API key");
     }
 
@@ -89,7 +93,7 @@ class ApiKeyServiceTest {
         // A distinct message would tell an attacker their guessed key was once
         // real, which narrows the search.
         assertThatThrownBy(() -> apiKeyService.authenticate("argus_revoked"))
-                .isInstanceOf(UnauthorizedException.class)
+                .isInstanceOf(InvalidApiKeyException.class)
                 .hasMessage("Invalid API key");
     }
 

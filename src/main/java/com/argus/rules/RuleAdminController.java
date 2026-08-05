@@ -1,9 +1,8 @@
-package com.argus.management;
+package com.argus.rules;
 
 import com.argus.audit.AuditService;
-import com.argus.rules.RuleService;
-import com.argus.rules.dto.CreateRuleCommand;
-import com.argus.rules.dto.RuleView;
+import com.argus.rules.dto.CreateRuleRequest;
+import com.argus.rules.dto.RuleResponse;
 import com.argus.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -21,22 +20,22 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/v1/management/rules")
-public class RuleManagementController {
+public class RuleAdminController {
 
     private final RuleService ruleService;
     private final AuditService auditService;
 
-    public RuleManagementController(RuleService ruleService, AuditService auditService) {
+    public RuleAdminController(RuleService ruleService, AuditService auditService) {
         this.ruleService = ruleService;
         this.auditService = auditService;
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public RuleView create(@Valid @RequestBody CreateRuleCommand command) {
+    public RuleResponse create(@Valid @RequestBody CreateRuleRequest command) {
         UUID tenantId = AuthenticatedUser.tenantId();
 
-        RuleView rule = ruleService.create(tenantId, command);
+        RuleResponse rule = ruleService.create(tenantId, command);
         auditService.record(tenantId, AuthenticatedUser.userId(), "rule.created", rule.id().toString());
 
         return rule;
@@ -50,7 +49,7 @@ public class RuleManagementController {
     }
 
     @GetMapping
-    public List<RuleView> list() {
+    public List<RuleResponse> list() {
         return ruleService.findEnabledForTenant(AuthenticatedUser.tenantId());
     }
 }

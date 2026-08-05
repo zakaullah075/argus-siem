@@ -1,6 +1,5 @@
-package com.argus.management;
+package com.argus.ingest;
 
-import com.argus.ingest.EventService;
 import com.argus.ingest.dto.EventResponse;
 import com.argus.security.AuthenticatedUser;
 import org.springframework.data.domain.Page;
@@ -18,11 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/v1/management/events")
-public class EventManagementController {
+public class EventAdminController {
 
     private final EventService eventService;
 
-    public EventManagementController(EventService eventService) {
+    public EventAdminController(EventService eventService) {
         this.eventService = eventService;
     }
 

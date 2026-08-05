@@ -131,6 +131,51 @@ class ArchitectureTest {
         rule.check(classes);
     }
 
+    /**
+     * Every controller must sit in a feature package, never in a package that
+     * groups controllers together. A `management` package holding four unrelated
+     * controllers existed once: it is layer-shaped thinking inside a
+     * feature-shaped codebase, and it meant changing one feature touched two
+     * directories.
+     */
+    @Test
+    void controllersLiveInsideTheirFeature() {
+        ArchRule rule = noClasses()
+                .that().haveSimpleNameEndingWith("Controller")
+                .should().resideInAnyPackage(
+                        "..controller..", "..controllers..", "..web..",
+                        "..management..", "..api..")
+                .because("a controller belongs beside the service it drives");
+
+        rule.check(classes);
+    }
+
+    /**
+     * A response type that imports its entity cannot be moved or reused without
+     * dragging persistence along. Mapping belongs in a mapper.
+     */
+    @Test
+    void dtosMustNotDependOnEntities() {
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("..dto..")
+                .should().dependOnClassesThat().areAnnotatedWith("jakarta.persistence.Entity")
+                .because("the outward-facing type must not know the storage type");
+
+        rule.check(classes);
+    }
+
+    @Test
+    void mappersMustNotDependOnRepositoriesOrServices() {
+        ArchRule rule = noClasses()
+                .that().haveSimpleNameEndingWith("Mapper")
+                .should().dependOnClassesThat().haveSimpleNameEndingWith("Repository")
+                .orShould().dependOnClassesThat().haveSimpleNameEndingWith("Service")
+                .because("a mapper converts; anything more belongs in a service")
+                .allowEmptyShould(true);
+
+        rule.check(classes);
+    }
+
     @Test
     void noCyclesBetweenFeaturePackages() {
         ArchRule rule = com.tngtech.archunit.library.dependencies.SlicesRuleDefinition

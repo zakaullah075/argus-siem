@@ -1,6 +1,5 @@
-package com.argus.management;
+package com.argus.alerts;
 
-import com.argus.alerts.AlertService;
 import com.argus.alerts.dto.AlertResponse;
 import com.argus.audit.AuditService;
 import com.argus.security.AuthenticatedUser;
@@ -23,12 +22,12 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/v1/management/alerts")
-public class AlertManagementController {
+public class AlertAdminController {
 
     private final AlertService alertService;
     private final AuditService auditService;
 
-    public AlertManagementController(AlertService alertService, AuditService auditService) {
+    public AlertAdminController(AlertService alertService, AuditService auditService) {
         this.alertService = alertService;
         this.auditService = auditService;
     }

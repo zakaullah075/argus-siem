@@ -1,8 +1,8 @@
 package com.argus.rules;
 
-import com.argus.common.NotFoundException;
-import com.argus.rules.dto.CreateRuleCommand;
-import com.argus.rules.dto.RuleView;
+import com.argus.rules.dto.CreateRuleRequest;
+import com.argus.rules.dto.RuleResponse;
+import com.argus.rules.exception.RuleNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,32 +11,23 @@ import java.util.UUID;
 
 /**
  * Owns rule persistence so controllers never reach a repository directly, and
- * returns views rather than entities so the API contract cannot drift into the
- * database schema by accident.
+ * returns responses rather than entities so the API contract cannot drift into
+ * the database schema by accident.
  */
 @Service
 public class RuleService {
 
     private final RuleRepository ruleRepository;
+    private final RuleMapper ruleMapper;
 
-    public RuleService(RuleRepository ruleRepository) {
+    public RuleService(RuleRepository ruleRepository, RuleMapper ruleMapper) {
         this.ruleRepository = ruleRepository;
+        this.ruleMapper = ruleMapper;
     }
 
     @Transactional
-    public RuleView create(UUID tenantId, CreateRuleCommand command) {
-        Rule rule = ruleRepository.save(new Rule(
-                tenantId,
-                command.name(),
-                command.matchSource(),
-                command.matchEventType(),
-                command.minSeverity(),
-                command.thresholdCount(),
-                command.windowSeconds(),
-                command.alertSeverity()
-        ));
-
-        return RuleView.from(rule);
+    public RuleResponse create(UUID tenantId, CreateRuleRequest request) {
+        return ruleMapper.toResponse(ruleRepository.save(ruleMapper.toEntity(tenantId, request)));
     }
 
     /**
@@ -47,15 +38,15 @@ public class RuleService {
     @Transactional
     public void disable(UUID tenantId, UUID ruleId) {
         Rule rule = ruleRepository.findByIdAndTenantId(ruleId, tenantId)
-                .orElseThrow(() -> new NotFoundException("Rule", ruleId));
+                .orElseThrow(() -> new RuleNotFoundException(ruleId));
         rule.disable();
     }
 
     @Transactional(readOnly = true)
-    public List<RuleView> findEnabledForTenant(UUID tenantId) {
+    public List<RuleResponse> findEnabledForTenant(UUID tenantId) {
         return ruleRepository.findByTenantIdAndEnabledTrue(tenantId)
                 .stream()
-                .map(RuleView::from)
+                .map(ruleMapper::toResponse)
                 .toList();
     }
 }

@@ -1,7 +1,8 @@
 package com.argus.apikey;
 
-import com.argus.common.NotFoundException;
-import com.argus.common.UnauthorizedException;
+import com.argus.apikey.dto.ApiKeyResponse;
+import com.argus.apikey.exception.ApiKeyNotFoundException;
+import com.argus.apikey.exception.InvalidApiKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,10 +21,12 @@ public class ApiKeyService {
     private static final String KEY_PREFIX = "argus_";
 
     private final ApiKeyRepository apiKeyRepository;
+    private final ApiKeyMapper apiKeyMapper;
     private final SecureRandom secureRandom = new SecureRandom();
 
-    public ApiKeyService(ApiKeyRepository apiKeyRepository) {
+    public ApiKeyService(ApiKeyRepository apiKeyRepository, ApiKeyMapper apiKeyMapper) {
         this.apiKeyRepository = apiKeyRepository;
+        this.apiKeyMapper = apiKeyMapper;
     }
 
     /**
@@ -43,10 +46,10 @@ public class ApiKeyService {
     }
 
     @Transactional(readOnly = true)
-    public List<ApiKeyView> listForTenant(UUID tenantId) {
+    public List<ApiKeyResponse> listForTenant(UUID tenantId) {
         return apiKeyRepository.findByTenantIdOrderByCreatedAtDesc(tenantId)
                 .stream()
-                .map(ApiKeyView::from)
+                .map(apiKeyMapper::toResponse)
                 .toList();
     }
 
@@ -57,21 +60,21 @@ public class ApiKeyService {
     @Transactional
     public void revoke(UUID tenantId, UUID keyId) {
         ApiKey key = apiKeyRepository.findByIdAndTenantId(keyId, tenantId)
-                .orElseThrow(() -> new NotFoundException("API key", keyId));
+                .orElseThrow(() -> new ApiKeyNotFoundException(keyId));
         key.revoke();
     }
 
     @Transactional
     public UUID authenticate(String plaintextKey) {
         if (plaintextKey == null || plaintextKey.isBlank()) {
-            throw new UnauthorizedException("Missing API key");
+            throw new InvalidApiKeyException();
         }
 
         ApiKey key = apiKeyRepository.findByKeyHash(hash(plaintextKey))
-                .orElseThrow(() -> new UnauthorizedException("Invalid API key"));
+                .orElseThrow(() -> new InvalidApiKeyException());
 
         if (key.isRevoked()) {
-            throw new UnauthorizedException("Invalid API key");
+            throw new InvalidApiKeyException();
         }
 
         key.markUsed();

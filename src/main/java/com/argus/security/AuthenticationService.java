@@ -1,6 +1,7 @@
 package com.argus.security;
 
-import com.argus.common.UnauthorizedException;
+import com.argus.security.dto.SessionResponse;
+import com.argus.security.exception.InvalidCredentialsException;
 import com.argus.user.AppUser;
 import com.argus.user.AppUserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -30,16 +31,14 @@ public class AuthenticationService {
      * accounts.
      */
     @Transactional(readOnly = true)
-    public AuthenticatedSession login(String email, String password) {
+    public SessionResponse login(String email, String password) {
         AppUser user = userRepository.findByEmail(email.toLowerCase()).orElse(null);
 
         if (user == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
-            throw new UnauthorizedException("Invalid credentials");
+            throw new InvalidCredentialsException();
         }
 
-        return new AuthenticatedSession(tokenService.issue(user), user.getRole().name());
+        return new SessionResponse(tokenService.issue(user), user.getRole().name());
     }
 
-    public record AuthenticatedSession(String token, String role) {
-    }
 }

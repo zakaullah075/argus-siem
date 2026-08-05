@@ -1,15 +1,16 @@
 package com.argus.security;
 
 import com.argus.audit.AuditService;
-import com.argus.common.ApiException;
 import com.argus.ratelimit.RateLimiter;
+import com.argus.security.dto.SessionResponse;
+import com.argus.security.exception.EmailAlreadyRegisteredException;
+import com.argus.security.exception.SignupThrottledException;
 import com.argus.tenant.Tenant;
 import com.argus.tenant.TenantRepository;
 import com.argus.user.AppUser;
 import com.argus.user.AppUserRepository;
 import com.argus.user.Role;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,7 +56,7 @@ public class SignupService {
      * caller address, keyed through the same limiter used for ingest.
      */
     @Transactional
-    public AuthenticationService.AuthenticatedSession signUp(String organisation,
+    public SessionResponse signUp(String organisation,
                                                              String email,
                                                              String password,
                                                              String callerAddress) {
@@ -67,7 +68,7 @@ public class SignupService {
         // database constraint alone — two organisations may legitimately share
         // an address, but one address must not create two accounts by accident.
         if (userRepository.findByEmail(normalised).isPresent()) {
-            throw new SignupConflictException("An account already exists for that email");
+            throw new EmailAlreadyRegisteredException();
         }
 
         Tenant tenant = tenantRepository.save(
@@ -78,8 +79,7 @@ public class SignupService {
 
         auditService.recordWithCaller(tenant.getId(), admin.getId(), "tenant.created", tenant.getName());
 
-        return new AuthenticationService.AuthenticatedSession(
-                tokenService.issue(admin), admin.getRole().name());
+        return new SessionResponse(tokenService.issue(admin), admin.getRole().name());
     }
 
     /**
@@ -96,16 +96,5 @@ public class SignupService {
         }
     }
 
-    public static class SignupConflictException extends ApiException {
-        public SignupConflictException(String message) {
-            super(HttpStatus.CONFLICT, message);
-        }
-    }
 
-    public static class SignupThrottledException extends ApiException {
-        public SignupThrottledException(int limit) {
-            super(HttpStatus.TOO_MANY_REQUESTS,
-                    "Too many signups from this address; limit is %d per minute".formatted(limit));
-        }
-    }
 }

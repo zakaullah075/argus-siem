@@ -19,15 +19,18 @@ import java.util.UUID;
 public class EventService {
 
     private final EventRepository eventRepository;
+    private final EventMapper eventMapper;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final RateLimiter rateLimiter;
     private final TenantLimits tenantLimits;
 
     public EventService(EventRepository eventRepository,
+                        EventMapper eventMapper,
                         ApplicationEventPublisher applicationEventPublisher,
                         RateLimiter rateLimiter,
                         TenantLimits tenantLimits) {
         this.eventRepository = eventRepository;
+        this.eventMapper = eventMapper;
         this.applicationEventPublisher = applicationEventPublisher;
         this.rateLimiter = rateLimiter;
         this.tenantLimits = tenantLimits;
@@ -53,17 +56,7 @@ public class EventService {
             return new IngestEventResponse(eventId, true);
         }
 
-        var event = new Event(
-                eventId,
-                tenantId,
-                request.source(),
-                request.eventType(),
-                request.severity(),
-                request.actor(),
-                request.target(),
-                request.payload().toString(),
-                request.occurredAt()
-        );
+        var event = eventMapper.toEntity(eventId, tenantId, request);
 
         eventRepository.save(event);
 
@@ -78,6 +71,6 @@ public class EventService {
     @Transactional(readOnly = true)
     public Page<EventResponse> findForTenant(UUID tenantId, Pageable pageable) {
         return eventRepository.findByTenantId(tenantId, pageable)
-                .map(EventResponse::from);
+                .map(eventMapper::toResponse);
     }
 }

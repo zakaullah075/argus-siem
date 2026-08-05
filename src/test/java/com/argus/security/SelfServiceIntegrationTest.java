@@ -1,4 +1,4 @@
-package com.argus.management;
+package com.argus.security;
 
 import com.argus.apikey.ApiKeyRepository;
 import com.argus.rules.RuleRepository;

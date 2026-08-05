@@ -1,6 +1,6 @@
 package com.argus.apikey;
 
-import com.argus.common.UnauthorizedException;
+import com.argus.apikey.exception.InvalidApiKeyException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -53,7 +53,7 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         try {
             UUID tenantId = apiKeyService.authenticate(request.getHeader(HEADER));
             request.setAttribute(TENANT_ID_ATTRIBUTE, tenantId);
-        } catch (UnauthorizedException e) {
+        } catch (InvalidApiKeyException e) {
             // Filters run before @RestControllerAdvice, so this one writes its
             // own response rather than letting the exception escape the chain.
             response.setStatus(HttpStatus.UNAUTHORIZED.value());

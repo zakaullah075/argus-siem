@@ -1,6 +1,5 @@
 package com.argus.alerts.dto;
 
-import com.argus.alerts.Alert;
 import com.argus.alerts.AlertStatus;
 import com.argus.common.Severity;
 
@@ -17,17 +16,4 @@ public record AlertResponse(
         Instant firstSeenAt,
         Instant lastSeenAt
 ) {
-
-    public static AlertResponse from(Alert alert) {
-        return new AlertResponse(
-                alert.getId(),
-                alert.getRuleId(),
-                alert.getStatus(),
-                alert.getSeverity(),
-                alert.getDedupeKey(),
-                alert.getOccurrenceCount(),
-                alert.getFirstSeenAt(),
-                alert.getLastSeenAt()
-        );
-    }
 }
