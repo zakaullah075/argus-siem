@@ -1,5 +1,6 @@
 package com.argus.ingest;
 
+import com.argus.support.AbstractIntegrationTest;
 import com.argus.apikey.ApiKeyRepository;
 import com.argus.apikey.ApiKeyService;
 import com.argus.tenant.Tenant;
@@ -7,13 +8,7 @@ import com.argus.tenant.TenantRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.UUID;
 
@@ -29,14 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * H2 would not enforce the jsonb column, the check constraint, or the unique
  * index — so it would pass while production failed.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@Testcontainers
-class EventIngestIntegrationTest {
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+class EventIngestIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
