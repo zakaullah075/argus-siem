@@ -3,9 +3,10 @@ package com.argus.ingest;
 import com.argus.common.RateLimitExceededException;
 import com.argus.ingest.dto.EventResponse;
 import com.argus.common.EventIngested;
+import com.argus.outbox.OutboxWriter;
+import com.argus.pipeline.RabbitConfig;
 import com.argus.ratelimit.RateLimiter;
 import com.argus.ratelimit.TenantLimits;
-import org.springframework.context.ApplicationEventPublisher;
 import com.argus.ingest.dto.IngestEventRequest;
 import com.argus.ingest.dto.IngestEventResponse;
 import org.springframework.data.domain.Page;
@@ -20,18 +21,18 @@ public class EventService {
 
     private final EventRepository eventRepository;
     private final EventMapper eventMapper;
-    private final ApplicationEventPublisher applicationEventPublisher;
+    private final OutboxWriter outboxWriter;
     private final RateLimiter rateLimiter;
     private final TenantLimits tenantLimits;
 
     public EventService(EventRepository eventRepository,
                         EventMapper eventMapper,
-                        ApplicationEventPublisher applicationEventPublisher,
+                        OutboxWriter outboxWriter,
                         RateLimiter rateLimiter,
                         TenantLimits tenantLimits) {
         this.eventRepository = eventRepository;
         this.eventMapper = eventMapper;
-        this.applicationEventPublisher = applicationEventPublisher;
+        this.outboxWriter = outboxWriter;
         this.rateLimiter = rateLimiter;
         this.tenantLimits = tenantLimits;
     }
@@ -60,10 +61,11 @@ public class EventService {
 
         eventRepository.save(event);
 
-        // Detection now happens in a consumer. The listener publishes only after
-        // this transaction commits, so a rollback cannot announce an event that
-        // was never stored.
-        applicationEventPublisher.publishEvent(new EventIngested(eventId, tenantId));
+        // Written in this transaction, not published from it. The row and the
+        // message commit together or not at all, so a crash can no longer leave
+        // an event stored but never evaluated.
+        outboxWriter.write(eventId, tenantId, RabbitConfig.DETECTION_ROUTING_KEY,
+                new EventIngested(eventId, tenantId));
 
         return new IngestEventResponse(eventId, false);
     }

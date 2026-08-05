@@ -25,6 +25,11 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
      * <p>
      * Severities arrive as an explicit set because the column stores enum names,
      * so a relational comparison would order them alphabetically, not by rank.
+     * <p>
+     * The window is closed at both ends. With only a lower bound, an event
+     * evaluated after later events had already been stored would count them
+     * too — so three events five minutes apart could satisfy a sixty second
+     * rule. Synchronous evaluation hid that, because nothing later existed yet.
      */
     @Query("""
             select count(e) from Event e
@@ -33,6 +38,7 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
               and (:eventType is null or e.eventType = :eventType)
               and e.severity in :severities
               and e.occurredAt >= :since
+              and e.occurredAt <= :until
               and (:actor is null or e.actor = :actor)
             """)
     long countMatching(@Param("tenantId") UUID tenantId,
@@ -40,5 +46,6 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
                        @Param("eventType") String eventType,
                        @Param("severities") Collection<Severity> severities,
                        @Param("since") Instant since,
+                       @Param("until") Instant until,
                        @Param("actor") String actor);
 }

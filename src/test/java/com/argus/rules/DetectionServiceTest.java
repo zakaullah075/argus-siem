@@ -65,7 +65,7 @@ class DetectionServiceTest {
         detectionService.evaluate(event("sshd", "auth.failed", Severity.HIGH, "root"));
 
         verify(eventRepository, never())
-                .countMatching(any(), any(), any(), any(), any(), any());
+                .countMatching(any(), any(), any(), any(), any(), any(), any());
         verify(alertService, never()).raise(any(), any(), any(), anyString());
     }
 
@@ -83,7 +83,7 @@ class DetectionServiceTest {
     void treatsNullConditionsAsMatchingAnything() {
         when(ruleRepository.findByTenantIdAndEnabledTrue(TENANT))
                 .thenReturn(List.of(rule(null, null, null, 1)));
-        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any()))
+        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(1L);
 
         detectionService.evaluate(event("anything", "any.type", Severity.LOW, "someone"));
@@ -95,7 +95,7 @@ class DetectionServiceTest {
     void doesNotRaiseWhenCountIsBelowThreshold() {
         when(ruleRepository.findByTenantIdAndEnabledTrue(TENANT))
                 .thenReturn(List.of(rule("sshd", "auth.failed", Severity.LOW, 5)));
-        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any()))
+        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(4L);
 
         detectionService.evaluate(event("sshd", "auth.failed", Severity.HIGH, "root"));
@@ -107,7 +107,7 @@ class DetectionServiceTest {
     void raisesWhenCountReachesThresholdExactly() {
         when(ruleRepository.findByTenantIdAndEnabledTrue(TENANT))
                 .thenReturn(List.of(rule("sshd", "auth.failed", Severity.LOW, 5)));
-        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any()))
+        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(5L);
 
         detectionService.evaluate(event("sshd", "auth.failed", Severity.HIGH, "root"));
@@ -119,24 +119,49 @@ class DetectionServiceTest {
     void windowStartsFromTheEventTimeNotWallClock() {
         when(ruleRepository.findByTenantIdAndEnabledTrue(TENANT))
                 .thenReturn(List.of(rule("sshd", "auth.failed", Severity.LOW, 1)));
-        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any()))
+        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(1L);
 
         detectionService.evaluate(event("sshd", "auth.failed", Severity.HIGH, "root"));
 
         var since = ArgumentCaptor.forClass(Instant.class);
-        verify(eventRepository).countMatching(any(), any(), any(), any(), since.capture(), any());
+        verify(eventRepository).countMatching(any(), any(), any(), any(), since.capture(), any(), any());
 
         // Anchoring on wall clock would make a backfilled batch of old events
         // silently fall outside every window.
         assertThat(since.getValue()).isEqualTo(NOW.minusSeconds(300));
     }
 
+    /**
+     * The window must be closed at both ends. With only a lower bound, an event
+     * evaluated after later events were already stored counted them towards its
+     * own threshold — so three events five minutes apart satisfied a sixty
+     * second rule. Synchronous evaluation hid it, because nothing later existed
+     * at the moment of evaluation; moving detection to a consumer exposed it.
+     */
+    @Test
+    void windowIsClosedAtBothEndsSoLaterEventsDoNotCount() {
+        when(ruleRepository.findByTenantIdAndEnabledTrue(TENANT))
+                .thenReturn(List.of(rule("sshd", "auth.failed", Severity.LOW, 1)));
+        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(1L);
+
+        detectionService.evaluate(event("sshd", "auth.failed", Severity.HIGH, "root"));
+
+        var since = ArgumentCaptor.forClass(Instant.class);
+        var until = ArgumentCaptor.forClass(Instant.class);
+        verify(eventRepository)
+                .countMatching(any(), any(), any(), any(), since.capture(), until.capture(), any());
+
+        assertThat(since.getValue()).isEqualTo(NOW.minusSeconds(300));
+        assertThat(until.getValue()).isEqualTo(NOW);
+    }
+
     @Test
     void expandsMinimumSeverityIntoAnExplicitSet() {
         when(ruleRepository.findByTenantIdAndEnabledTrue(TENANT))
                 .thenReturn(List.of(rule("sshd", "auth.failed", Severity.MEDIUM, 1)));
-        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any()))
+        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(1L);
 
         detectionService.evaluate(event("sshd", "auth.failed", Severity.HIGH, "root"));
@@ -145,7 +170,7 @@ class DetectionServiceTest {
         ArgumentCaptor<Collection<Severity>> severities =
                 ArgumentCaptor.forClass(Collection.class);
         verify(eventRepository)
-                .countMatching(any(), any(), any(), severities.capture(), any(), any());
+                .countMatching(any(), any(), any(), severities.capture(), any(), any(), any());
 
         // The column stores enum names, so a >= comparison would sort them
         // alphabetically: CRITICAL < HIGH < LOW < MEDIUM. Wrong, and silently so.
@@ -157,13 +182,13 @@ class DetectionServiceTest {
     void countsPerActorSoSeparateAccountsDoNotCombine() {
         when(ruleRepository.findByTenantIdAndEnabledTrue(TENANT))
                 .thenReturn(List.of(rule("sshd", "auth.failed", Severity.LOW, 1)));
-        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any()))
+        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(1L);
 
         detectionService.evaluate(event("sshd", "auth.failed", Severity.HIGH, "alice"));
 
         var actor = ArgumentCaptor.forClass(String.class);
-        verify(eventRepository).countMatching(any(), any(), any(), any(), any(), actor.capture());
+        verify(eventRepository).countMatching(any(), any(), any(), any(), any(), any(), actor.capture());
         assertThat(actor.getValue()).isEqualTo("alice");
     }
 
@@ -171,7 +196,7 @@ class DetectionServiceTest {
     void dedupeKeyCombinesRuleAndActorSoOneAccountYieldsOneAlert() {
         Rule rule = rule("sshd", "auth.failed", Severity.LOW, 1);
         when(ruleRepository.findByTenantIdAndEnabledTrue(TENANT)).thenReturn(List.of(rule));
-        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any()))
+        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(1L);
 
         detectionService.evaluate(event("sshd", "auth.failed", Severity.HIGH, "alice"));
@@ -185,7 +210,7 @@ class DetectionServiceTest {
     void dedupeKeyFallsBackWhenEventHasNoActor() {
         Rule rule = rule("sshd", "auth.failed", Severity.LOW, 1);
         when(ruleRepository.findByTenantIdAndEnabledTrue(TENANT)).thenReturn(List.of(rule));
-        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any()))
+        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(1L);
 
         detectionService.evaluate(event("sshd", "auth.failed", Severity.HIGH, null));
@@ -200,7 +225,7 @@ class DetectionServiceTest {
         when(ruleRepository.findByTenantIdAndEnabledTrue(TENANT)).thenReturn(List.of(
                 rule("sshd", "auth.failed", Severity.LOW, 1),
                 rule("sshd", "auth.failed", Severity.LOW, 1)));
-        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any()))
+        when(eventRepository.countMatching(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(1L);
 
         detectionService.evaluate(event("sshd", "auth.failed", Severity.HIGH, "root"));

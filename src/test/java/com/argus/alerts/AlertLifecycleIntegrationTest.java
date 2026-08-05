@@ -4,6 +4,7 @@ import com.argus.audit.AuditLogRepository;
 import com.argus.common.Severity;
 import com.argus.rules.Rule;
 import com.argus.rules.RuleRepository;
+import com.argus.outbox.OutboxRepository;
 import com.argus.support.AbstractIntegrationTest;
 import com.argus.tenant.Tenant;
 import com.argus.tenant.TenantRepository;
@@ -37,6 +38,9 @@ class AlertLifecycleIntegrationTest extends AbstractIntegrationTest {
     private TenantRepository tenantRepository;
 
     @Autowired
+    private OutboxRepository outboxRepository;
+
+    @Autowired
     private AppUserRepository userRepository;
 
     @Autowired
@@ -58,6 +62,9 @@ class AlertLifecycleIntegrationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        // The relay polls continuously across the whole suite, so a message left
+        // by an earlier test would be delivered into this one.
+        outboxRepository.deleteAll();
         auditLogRepository.deleteAll();
         alertRepository.deleteAll();
         ruleRepository.deleteAll();

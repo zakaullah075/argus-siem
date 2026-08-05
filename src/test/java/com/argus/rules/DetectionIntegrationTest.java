@@ -6,6 +6,7 @@ import com.argus.apikey.ApiKeyRepository;
 import com.argus.apikey.ApiKeyService;
 import com.argus.ingest.EventRepository;
 import com.argus.common.Severity;
+import com.argus.outbox.OutboxRepository;
 import com.argus.support.AbstractIntegrationTest;
 import com.argus.tenant.Tenant;
 import com.argus.tenant.TenantRepository;
@@ -42,6 +43,9 @@ class DetectionIntegrationTest extends AbstractIntegrationTest {
     private TenantRepository tenantRepository;
 
     @Autowired
+    private OutboxRepository outboxRepository;
+
+    @Autowired
     private ApiKeyRepository apiKeyRepository;
 
     @Autowired
@@ -61,6 +65,9 @@ class DetectionIntegrationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        // The relay polls continuously across the whole suite, so a message left
+        // by an earlier test would be delivered into this one.
+        outboxRepository.deleteAll();
         alertRepository.deleteAll();
         ruleRepository.deleteAll();
         eventRepository.deleteAll();

@@ -46,6 +46,10 @@ public class DetectionService {
             // One count query per matching rule. Fine while tenants have a handful
             // of rules; at hundreds this becomes the bottleneck and the counting
             // should move to a rolling counter in Redis rather than a scan.
+            // Closed at both ends: [occurredAt - window, occurredAt]. An open
+            // upper bound would let events that happened after this one count
+            // towards its threshold, which is only invisible when evaluation is
+            // immediate.
             Instant since = event.getOccurredAt().minusSeconds(rule.getWindowSeconds());
 
             long matches = eventRepository.countMatching(
@@ -54,6 +58,7 @@ public class DetectionService {
                     rule.getMatchEventType(),
                     severitiesAtLeast(rule.getMinSeverity()),
                     since,
+                    event.getOccurredAt(),
                     // Counting per actor, so ten accounts each failing twice does
                     // not add up to a brute-force alert against nobody.
                     event.getActor()
