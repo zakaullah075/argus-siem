@@ -1,16 +1,18 @@
 'use strict';
 
-// The token lives in memory only. sessionStorage would survive a refresh, but
-// it is also readable by any script on the page, and this is a demo that does
-// not need the convenience.
+// In memory only. sessionStorage would survive a refresh but is readable by any
+// script on the page, and a demo does not need the convenience.
 let token = null;
 let role = null;
+let poller = null;
+let ruleNames = new Map();
 
 const $ = (id) => document.getElementById(id);
 
-async function api(path) {
+async function api(path, options = {}) {
     const response = await fetch(path, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        ...options,
+        headers: { 'Authorization': `Bearer ${token}`, ...(options.headers || {}) }
     });
 
     if (response.status === 401) {
@@ -40,12 +42,9 @@ async function signIn(event) {
             body: JSON.stringify({ email: $('email').value, password: $('password').value })
         });
 
-        if (!response.ok) {
-            // The API deliberately returns the same message for an unknown
-            // account and a wrong password, so there is nothing more specific
-            // to show here.
-            throw new Error('Invalid credentials');
-        }
+        // The API returns the same message for an unknown account as for a wrong
+        // password, so there is nothing more specific to show.
+        if (!response.ok) throw new Error('Invalid credentials');
 
         const session = await response.json();
         token = session.token;
@@ -57,6 +56,7 @@ async function signIn(event) {
         $('who').textContent = `${$('email').value} · ${role}`;
 
         await refresh();
+        startPolling();
     } catch (e) {
         error.textContent = e.message;
         error.classList.remove('hidden');
@@ -67,11 +67,49 @@ async function signIn(event) {
 }
 
 function signOut() {
+    stopPolling();
     token = null;
     role = null;
     $('app-view').classList.add('hidden');
     $('session').classList.add('hidden');
     $('login-view').classList.remove('hidden');
+}
+
+// Detection is asynchronous, so a table read straight after sending events would
+// show them before any rule had run. Polling is what makes the delay visible
+// rather than looking like nothing happened.
+function startPolling() {
+    stopPolling();
+    poller = setInterval(() => refresh().catch(() => {}), 2000);
+}
+
+function stopPolling() {
+    if (poller) clearInterval(poller);
+    poller = null;
+}
+
+async function simulate(kind, button) {
+    const buttons = document.querySelectorAll('[data-sim]');
+    buttons.forEach(b => b.disabled = true);
+    const original = button.textContent;
+    button.textContent = 'Sending…';
+
+    try {
+        const result = await api(`/v1/demo/simulate/${kind}`, { method: 'POST' });
+        const banner = $('sim-result');
+        banner.innerHTML =
+            `<strong>${escape(result.summary)}</strong> — ${escape(result.eventsSent)} events sent. ` +
+            `<span class="muted">${escape(result.hint)}</span>`;
+        banner.classList.remove('hidden');
+        await refresh();
+    } catch (e) {
+        const banner = $('sim-result');
+        banner.textContent = `Failed: ${e.message}`;
+        banner.classList.remove('hidden');
+    } finally {
+        buttons.forEach(b => b.disabled = false);
+        button.textContent = original;
+    }
 }
 
 async function refresh() {
@@ -80,6 +118,8 @@ async function refresh() {
         api('/v1/management/events?size=50'),
         api('/v1/management/rules')
     ]);
+
+    ruleNames = new Map(rules.map(r => [r.id, r.name]));
 
     renderAlerts(alerts.content);
     renderEvents(events.content);
@@ -95,36 +135,37 @@ function renderAlerts(alerts) {
     body.innerHTML = '';
 
     if (!alerts.length) {
-        body.innerHTML = row(7, 'No alerts yet.');
+        body.innerHTML = row(8, 'No alerts. Generate some traffic above.');
         return;
     }
 
     for (const alert of alerts) {
+        // The dedupe key is ruleId:actor. Showing the raw uuid is noise; the
+        // rule name and the account under attack are what an analyst reads.
+        const actor = alert.dedupeKey.split(':').slice(1).join(':') || '—';
+        const ruleName = ruleNames.get(alert.ruleId) ?? alert.ruleId.slice(0, 8);
         const canAct = role === 'ADMIN' || role === 'ANALYST';
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td><span class="sev ${alert.severity}">${alert.severity}</span></td>
             <td><span class="status ${alert.status}">${alert.status}</span></td>
-            <td><code>${escape(alert.dedupeKey)}</code></td>
-            <td class="num">${alert.occurrenceCount}</td>
-            <td>${time(alert.firstSeenAt)}</td>
-            <td>${time(alert.lastSeenAt)}</td>
+            <td>${escape(ruleName)}</td>
+            <td><code>${escape(actor)}</code></td>
+            <td class="num"><span class="count">${alert.occurrenceCount}</span></td>
+            <td class="muted">${ago(alert.firstSeenAt)}</td>
+            <td class="muted">${ago(alert.lastSeenAt)}</td>
             <td>${canAct && alert.status !== 'RESOLVED'
                     ? `<button class="ghost" data-resolve="${alert.id}">Resolve</button>` : ''}</td>`;
         body.appendChild(tr);
     }
 
     body.querySelectorAll('[data-resolve]').forEach(button => {
-        button.addEventListener('click', () => resolve(button.dataset.resolve));
+        button.addEventListener('click', async () => {
+            await api(`/v1/management/alerts/${button.dataset.resolve}/resolve`, { method: 'POST' });
+            await refresh();
+        });
     });
-}
-
-async function resolve(alertId) {
-    await fetch(`/v1/management/alerts/${alertId}/resolve`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-    });
-    await refresh();
 }
 
 function renderEvents(events) {
@@ -139,7 +180,7 @@ function renderEvents(events) {
             <td><code>${escape(event.eventType)}</code></td>
             <td>${escape(event.actor ?? '—')}</td>
             <td>${escape(event.target ?? '—')}</td>
-            <td>${time(event.occurredAt)}</td>`;
+            <td class="muted">${ago(event.occurredAt)}</td>`;
         body.appendChild(tr);
     }
 }
@@ -165,12 +206,17 @@ function renderRules(rules) {
 
 const row = (cols, text) => `<tr><td colspan="${cols}" class="muted">${text}</td></tr>`;
 
-const time = (iso) => new Date(iso).toLocaleString(undefined, {
-    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-});
+function ago(iso) {
+    const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (seconds < 5) return 'just now';
+    if (seconds < 60) return `${seconds}s ago`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    return new Date(iso).toLocaleDateString();
+}
 
-// Values come from the database and are rendered into innerHTML, so anything
-// an agent could put in a field has to be neutralised first.
+// Event actor and target are whatever an agent sent, so they are untrusted input
+// heading for innerHTML. Neutralise before rendering.
 function escape(value) {
     const div = document.createElement('div');
     div.textContent = String(value);
@@ -181,6 +227,10 @@ document.addEventListener('DOMContentLoaded', () => {
     $('login-form').addEventListener('submit', signIn);
     $('logout').addEventListener('click', signOut);
 
+    document.querySelectorAll('[data-sim]').forEach(button => {
+        button.addEventListener('click', () => simulate(button.dataset.sim, button));
+    });
+
     document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -188,5 +238,12 @@ document.addEventListener('DOMContentLoaded', () => {
             tab.classList.add('active');
             $(`tab-${tab.dataset.tab}`).classList.remove('hidden');
         });
+    });
+
+    // Stop polling when the tab is hidden. A background tab hammering a free
+    // instance every two seconds is pure waste.
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) stopPolling();
+        else if (token) startPolling();
     });
 });

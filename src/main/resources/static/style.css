@@ -161,3 +161,60 @@ footer a:hover { text-decoration: underline; }
     .stats { grid-template-columns: 1fr; }
     main, header, footer { padding-left: 16px; padding-right: 16px; }
 }
+
+/* --- live simulation --- */
+
+.simulate {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 26px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+.simulate h2 { margin: 0 0 4px; font-size: 16px; }
+.simulate p { margin: 0; max-width: 520px; }
+
+.sim-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.sim-result {
+    background: rgba(75,159,255,.08);
+    border: 1px solid rgba(75,159,255,.3);
+    border-radius: 8px;
+    padding: 11px 14px;
+    font-size: 13.5px;
+    margin: 0 0 20px;
+}
+
+.live {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--low);
+    padding: 2px 8px;
+    border: 1px solid rgba(107,207,143,.35);
+    border-radius: 999px;
+}
+.live::before {
+    content: '';
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--low);
+    margin-right: 6px;
+    animation: pulse 1.8s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+.count {
+    display: inline-block;
+    min-width: 26px;
+    padding: 1px 7px;
+    border-radius: 4px;
+    background: rgba(255,159,67,.15);
+    color: var(--high);
+    font-weight: 600;
+}
+
+tbody tr { transition: background .4s ease; }
+tbody tr:hover { background: rgba(255,255,255,.02); }

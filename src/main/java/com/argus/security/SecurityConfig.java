@@ -58,6 +58,12 @@ public class SecurityConfig {
                         // are already authenticated by the time they arrive.
                         .requestMatchers("/v1/events/**", "/v1/alerts/**").permitAll()
 
+                        // The demo generator only exists when demo seeding is on,
+                        // and writes only to the caller's own tenant. It needs a
+                        // token, but not a write role — the point is to let a
+                        // read-only visitor watch the pipeline run.
+                        .requestMatchers("/v1/demo/**").authenticated()
+
                         // Alert triage is the analyst's job, so it is carved out
                         // ahead of the admin-only write rule. Matchers are
                         // evaluated in order and the first match wins, so a

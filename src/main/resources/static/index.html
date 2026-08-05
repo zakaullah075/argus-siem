@@ -15,6 +15,7 @@
         <span class="tag">security event platform</span>
     </div>
     <div id="session" class="session hidden">
+        <span id="live-badge" class="live">live</span>
         <span id="who"></span>
         <button id="logout" class="ghost">Sign out</button>
     </div>
@@ -25,9 +26,7 @@
     <section id="login-view">
         <div class="card login">
             <h2>Sign in</h2>
-            <p class="muted">
-                Read-only demo account. Data is seeded on first boot.
-            </p>
+            <p class="muted">Read-only demo account.</p>
             <form id="login-form">
                 <label>Email
                     <input id="email" type="email" value="demo@argus.dev" required>
@@ -39,13 +38,32 @@
             </form>
             <p id="login-error" class="error hidden"></p>
             <p class="muted small">
-                First request after idle can take ~50s — the free instance spins
-                down and the JVM has to start.
+                First request after idle takes ~60s — the free instance spins down
+                and the JVM has to start.
             </p>
         </div>
     </section>
 
     <section id="app-view" class="hidden">
+
+        <div class="simulate card">
+            <div>
+                <h2>Generate traffic</h2>
+                <p class="muted small">
+                    These write real events through the same path an agent uses —
+                    persisted, published after commit, consumed, evaluated. The
+                    tables below poll every two seconds, so you can watch a rule
+                    fire.
+                </p>
+            </div>
+            <div class="sim-buttons">
+                <button class="primary" data-sim="brute-force">SSH brute force</button>
+                <button data-sim="escalation">Privilege escalation</button>
+                <button data-sim="noise">Routine noise</button>
+            </div>
+        </div>
+
+        <p id="sim-result" class="sim-result hidden"></p>
 
         <div class="stats">
             <div class="stat"><span id="stat-events">–</span><label>Events</label></div>
@@ -63,15 +81,16 @@
             <table>
                 <thead>
                 <tr>
-                    <th>Severity</th><th>Status</th><th>Dedupe key</th>
+                    <th>Severity</th><th>Status</th><th>Rule</th><th>Target</th>
                     <th class="num">Count</th><th>First seen</th><th>Last seen</th><th></th>
                 </tr>
                 </thead>
                 <tbody id="alerts-body"></tbody>
             </table>
             <p class="muted small">
-                A burst folds into one alert with a rising count, rather than one
-                alert per event.
+                A burst folds into one alert whose count rises, rather than one
+                alert per event. Deduplication keys on rule plus actor, so two
+                accounts under attack stay separate.
             </p>
         </div>
 
@@ -85,6 +104,7 @@
                 </thead>
                 <tbody id="events-body"></tbody>
             </table>
+            <p class="muted small">Newest first, scoped to your tenant.</p>
         </div>
 
         <div id="tab-rules" class="panel hidden">
@@ -113,7 +133,7 @@
     <span>·</span>
     <a href="/actuator/health">Health</a>
     <span>·</span>
-    <span class="muted">Spring Boot 3.5 · Java 21 · PostgreSQL · RabbitMQ</span>
+    <span class="muted">Spring Boot 3.5 · Java 21 · PostgreSQL · RabbitMQ · Testcontainers</span>
 </footer>
 
 <script src="/app.js"></script>
