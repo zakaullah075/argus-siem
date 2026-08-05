@@ -135,7 +135,7 @@ Roles: **ADMIN** manages everything · **ANALYST** works alerts · **VIEWER** re
 ./mvnw test
 ```
 
-Around 90 tests across three levels:
+Around 120 tests across three levels:
 
 - **Unit** — detection matching, windowing, dedupe keys, key hashing, rate
   limiting. No Spring, no database, milliseconds.
@@ -165,10 +165,19 @@ a retrying agent collides instead of duplicating.
 need no slow hash, and this runs on every request). BCrypt for passwords
 (low-entropy and human-chosen, so slow is the point).
 
-**Publishing happens after commit, not inside the transaction.** A rollback must
-not announce an event that was never stored. The reverse gap — a crash between
-commit and publish — is real and needs a transactional outbox to close; that is
-noted in the code rather than pretended away.
+**The message is written in the same transaction as the event.** A transactional
+outbox, with a relay publishing afterwards — so the row and the instruction to
+evaluate it commit together or not at all. Publishing after commit instead would
+leave a window where a crash loses the evaluation silently.
+
+**Tenant isolation is enforced twice.** Every query is scoped, and Postgres row
+level security makes a forgotten predicate fail closed rather than return another
+customer's security events.
+
+**Detection windows are closed at both ends.** An open upper bound let events
+that happened *after* the one being evaluated count towards its threshold, so
+"3 failures in 60 seconds" fired on three failures five minutes apart. Invisible
+while evaluation was synchronous.
 
 **Alert deduplication keys on rule + actor.** Once a burst trips a threshold,
 every later event trips it too. Without folding, one brute-force attempt produces
@@ -186,14 +195,17 @@ the structure describes what the system does rather than which framework it uses
 
 Stated rather than hidden:
 
-- **No transactional outbox.** A crash between commit and publish leaves an event
-  stored but unevaluated.
+- **Delivery is at-least-once.** The outbox closes the lost-message gap, but a
+  crash after the broker accepts a message and before the row is marked will
+  republish it. Detection folds a repeat into the existing alert, so a duplicate
+  costs nothing — losing one would mean an attack goes unnoticed.
 - **Rate limiting is per instance.** In-memory counters mean two instances allow
   roughly twice the configured rate. The fixed window also permits a burst across
   the boundary.
-- **Tenant isolation is enforced in queries, not by the database.** Postgres
-  row-level security would make a forgotten predicate fail closed instead of
-  leaking. Covered by a test; not yet enforced structurally.
+- **Row level security does nothing if the application connects as a superuser.**
+  Policies are enabled and forced, but superusers and `BYPASSRLS` roles ignore
+  them unconditionally. The migration creates an `argus_app` role for this; a
+  deployment that ignores it falls back to predicate-only isolation.
 - **One count query per matching rule, per event.** Fine at a handful of rules per
   tenant; at hundreds this becomes the bottleneck and should move to rolling
   counters in Redis.
