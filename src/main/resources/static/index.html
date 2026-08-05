@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Argus — Security Event Platform</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header>
+    <div class="brand">
+        <span class="dot"></span>
+        <h1>Argus</h1>
+        <span class="tag">security event platform</span>
+    </div>
+    <div id="session" class="session hidden">
+        <span id="who"></span>
+        <button id="logout" class="ghost">Sign out</button>
+    </div>
+</header>
+
+<main>
+
+    <section id="login-view">
+        <div class="card login">
+            <h2>Sign in</h2>
+            <p class="muted">
+                Read-only demo account. Data is seeded on first boot.
+            </p>
+            <form id="login-form">
+                <label>Email
+                    <input id="email" type="email" value="demo@argus.dev" required>
+                </label>
+                <label>Password
+                    <input id="password" type="password" value="demo1234" required>
+                </label>
+                <button type="submit" class="primary">Sign in</button>
+            </form>
+            <p id="login-error" class="error hidden"></p>
+            <p class="muted small">
+                First request after idle can take ~50s — the free instance spins
+                down and the JVM has to start.
+            </p>
+        </div>
+    </section>
+
+    <section id="app-view" class="hidden">
+
+        <div class="stats">
+            <div class="stat"><span id="stat-events">–</span><label>Events</label></div>
+            <div class="stat"><span id="stat-open">–</span><label>Open alerts</label></div>
+            <div class="stat"><span id="stat-rules">–</span><label>Active rules</label></div>
+        </div>
+
+        <nav class="tabs">
+            <button class="tab active" data-tab="alerts">Alerts</button>
+            <button class="tab" data-tab="events">Events</button>
+            <button class="tab" data-tab="rules">Rules</button>
+        </nav>
+
+        <div id="tab-alerts" class="panel">
+            <table>
+                <thead>
+                <tr>
+                    <th>Severity</th><th>Status</th><th>Dedupe key</th>
+                    <th class="num">Count</th><th>First seen</th><th>Last seen</th><th></th>
+                </tr>
+                </thead>
+                <tbody id="alerts-body"></tbody>
+            </table>
+            <p class="muted small">
+                A burst folds into one alert with a rising count, rather than one
+                alert per event.
+            </p>
+        </div>
+
+        <div id="tab-events" class="panel hidden">
+            <table>
+                <thead>
+                <tr>
+                    <th>Severity</th><th>Source</th><th>Type</th>
+                    <th>Actor</th><th>Target</th><th>Occurred</th>
+                </tr>
+                </thead>
+                <tbody id="events-body"></tbody>
+            </table>
+        </div>
+
+        <div id="tab-rules" class="panel hidden">
+            <table>
+                <thead>
+                <tr>
+                    <th>Name</th><th>Source</th><th>Event type</th>
+                    <th>Min severity</th><th class="num">Threshold</th>
+                    <th class="num">Window</th><th>Raises</th>
+                </tr>
+                </thead>
+                <tbody id="rules-body"></tbody>
+            </table>
+            <p class="muted small">
+                A rule fires when its threshold is met inside a rolling window,
+                counted per actor.
+            </p>
+        </div>
+
+    </section>
+
+</main>
+
+<footer>
+    <a href="https://github.com/zakaullah075/argus-siem">Source</a>
+    <span>·</span>
+    <a href="/actuator/health">Health</a>
+    <span>·</span>
+    <span class="muted">Spring Boot 3.5 · Java 21 · PostgreSQL · RabbitMQ</span>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>
