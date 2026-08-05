@@ -24,4 +24,21 @@ public class AuditService {
     public void record(UUID tenantId, UUID actorId, String action, String resource) {
         auditLogRepository.save(new AuditLog(tenantId, actorId, action, resource));
     }
+
+    /**
+     * Joins the caller's transaction instead of opening its own.
+     * <p>
+     * REQUIRES_NEW is right when the audited thing already exists — the record
+     * then survives a rollback of the operation it describes. It is wrong when
+     * the caller is creating the row being referenced: a separate transaction
+     * cannot see an uncommitted tenant, so the foreign key fails.
+     * <p>
+     * The trade-off is explicit: this record rolls back with its operation. For
+     * a creation that is correct — a tenant that was never created has nothing
+     * to audit.
+     */
+    @Transactional(propagation = Propagation.REQUIRED)
+    public void recordWithCaller(UUID tenantId, UUID actorId, String action, String resource) {
+        auditLogRepository.save(new AuditLog(tenantId, actorId, action, resource));
+    }
 }
