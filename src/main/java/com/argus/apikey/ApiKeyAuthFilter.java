@@ -33,10 +33,15 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         this.apiKeyService = apiKeyService;
     }
 
+    /**
+     * Only the machine-facing endpoints authenticate with an API key. Human
+     * endpoints (/v1/auth, /v1/management) use JWTs and must not be intercepted
+     * here — an earlier version matched all of /v1/ and made login unreachable.
+     */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return !path.startsWith("/v1/");
+        return !(path.startsWith("/v1/events") || path.startsWith("/v1/alerts"));
     }
 
     @Override

@@ -18,6 +18,13 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+argus:
+  jwt:
+    # Local development value only. Production supplies ARGUS_JWT_SECRET from the
+    # environment; anyone holding this secret can mint tokens for any tenant.
+    secret: ${ARGUS_JWT_SECRET:local-dev-secret-not-for-production-use-min-32-bytes}
+    ttl-seconds: ${ARGUS_JWT_TTL_SECONDS:3600}
+
 management:
   endpoints:
     web:
