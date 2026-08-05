@@ -7,6 +7,23 @@ spring:
     username: argus
     password: argus_local_dev
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:argus}
+    password: ${RABBITMQ_PASSWORD:argus_local_dev}
+    listener:
+      simple:
+        retry:
+          enabled: true
+          initial-interval: 1s
+          max-attempts: 4
+          multiplier: 2
+        # After the retries are exhausted the message is rejected without
+        # requeue, which routes it to the dead letter queue. Requeueing instead
+        # would spin the same poison message forever.
+        default-requeue-rejected: false
+
   jpa:
     hibernate:
       # Flyway owns the schema. Hibernate only validates that the entities
@@ -29,7 +46,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
+  metrics:
+    tags:
+      application: argus
   endpoint:
     health:
       show-details: when-authorized

@@ -1,7 +1,11 @@
 package com.argus.ingest;
 
+import com.argus.common.RateLimitExceededException;
 import com.argus.ingest.dto.EventResponse;
-import com.argus.rules.DetectionService;
+import com.argus.pipeline.EventIngested;
+import com.argus.ratelimit.RateLimiter;
+import com.argus.ratelimit.TenantLimits;
+import org.springframework.context.ApplicationEventPublisher;
 import com.argus.ingest.dto.IngestEventRequest;
 import com.argus.ingest.dto.IngestEventResponse;
 import org.springframework.data.domain.Page;
@@ -15,15 +19,27 @@ import java.util.UUID;
 public class EventService {
 
     private final EventRepository eventRepository;
-    private final DetectionService detectionService;
+    private final ApplicationEventPublisher applicationEventPublisher;
+    private final RateLimiter rateLimiter;
+    private final TenantLimits tenantLimits;
 
-    public EventService(EventRepository eventRepository, DetectionService detectionService) {
+    public EventService(EventRepository eventRepository,
+                        ApplicationEventPublisher applicationEventPublisher,
+                        RateLimiter rateLimiter,
+                        TenantLimits tenantLimits) {
         this.eventRepository = eventRepository;
-        this.detectionService = detectionService;
+        this.applicationEventPublisher = applicationEventPublisher;
+        this.rateLimiter = rateLimiter;
+        this.tenantLimits = tenantLimits;
     }
 
     @Transactional
     public IngestEventResponse ingest(UUID tenantId, IngestEventRequest request) {
+        int limit = tenantLimits.perMinuteFor(tenantId);
+        if (!rateLimiter.tryAcquire(tenantId, limit)) {
+            throw new RateLimitExceededException(limit);
+        }
+
         UUID eventId = request.id() != null ? request.id() : UUID.randomUUID();
 
         // Agents retry on timeout, so the same event arrives more than once. The
@@ -51,10 +67,10 @@ public class EventService {
 
         eventRepository.save(event);
 
-        // Synchronous for now, so the caller waits for rule evaluation. That is
-        // acceptable while rules are few, and is the first thing to move off the
-        // request path when ingest volume grows.
-        detectionService.evaluate(event);
+        // Detection now happens in a consumer. The listener publishes only after
+        // this transaction commits, so a rollback cannot announce an event that
+        // was never stored.
+        applicationEventPublisher.publishEvent(new EventIngested(eventId, tenantId));
 
         return new IngestEventResponse(eventId, false);
     }
