@@ -3,7 +3,7 @@ package com.argus.rules;
 import com.argus.alerts.AlertService;
 import com.argus.ingest.Event;
 import com.argus.ingest.EventRepository;
-import com.argus.ingest.Severity;
+import com.argus.common.Severity;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

@@ -5,7 +5,7 @@ import com.argus.alerts.AlertRepository;
 import com.argus.apikey.ApiKeyRepository;
 import com.argus.apikey.ApiKeyService;
 import com.argus.ingest.EventRepository;
-import com.argus.ingest.Severity;
+import com.argus.common.Severity;
 import com.argus.support.AbstractIntegrationTest;
 import com.argus.tenant.Tenant;
 import com.argus.tenant.TenantRepository;
