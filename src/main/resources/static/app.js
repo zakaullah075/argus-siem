@@ -7,6 +7,13 @@ let role = null;
 let poller = null;
 let ruleNames = new Map();
 
+// Incremented on every sign-in and sign-out. A response that belongs to an
+// earlier session is discarded rather than rendered: without this, a poll issued
+// as one account can resolve after another has signed in, and the previous
+// tenant's rows stay on screen. In a security tool that reads as a data leak
+// even though the server scoped every response correctly.
+let session = 0;
+
 const $ = (id) => document.getElementById(id);
 
 async function api(path, options = {}) {
@@ -60,10 +67,21 @@ async function signIn(event) {
     }
 }
 
+function clearRenderedData() {
+    ['alerts-body', 'events-body', 'rules-body', 'keys-body']
+            .forEach(id => { const el = $(id); if (el) el.innerHTML = ''; });
+    ['stat-events', 'stat-open', 'stat-rules']
+            .forEach(id => { const el = $(id); if (el) el.textContent = '–'; });
+    ['sim-result', 'new-key']
+            .forEach(id => { const el = $(id); if (el) el.classList.add('hidden'); });
+}
+
 function signOut() {
     stopPolling();
+    session++;
     token = null;
     role = null;
+    clearRenderedData();
     $('app-view').classList.add('hidden');
     $('session').classList.add('hidden');
     $('login-view').classList.remove('hidden');
@@ -107,11 +125,19 @@ async function simulate(kind, button) {
 }
 
 async function refresh() {
+    const issuedFor = session;
+
     const [alerts, events, rules] = await Promise.all([
         api('/v1/management/alerts?size=50'),
         api('/v1/management/events?size=50'),
         api('/v1/management/rules')
     ]);
+
+    // The session changed while these were in flight — this data belongs to
+    // whoever was signed in before.
+    if (issuedFor !== session) {
+        return;
+    }
 
     ruleNames = new Map(rules.map(r => [r.id, r.name]));
 
@@ -320,6 +346,8 @@ async function refreshKeys() {
 }
 
 function enterApp(email) {
+    session++;
+    clearRenderedData();
     $('login-view').classList.add('hidden');
     $('app-view').classList.remove('hidden');
     $('session').classList.remove('hidden');
