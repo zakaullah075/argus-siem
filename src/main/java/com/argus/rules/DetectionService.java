@@ -3,7 +3,7 @@ package com.argus.rules;
 import com.argus.alerts.AlertService;
 import com.argus.ingest.Event;
 import com.argus.ingest.EventRepository;
-import com.argus.ingest.Severity;
+import com.argus.common.Severity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

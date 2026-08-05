@@ -1,6 +1,6 @@
 package com.argus.alerts;
 
-import com.argus.ingest.Severity;
+import com.argus.common.Severity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

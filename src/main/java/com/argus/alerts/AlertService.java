@@ -1,6 +1,8 @@
 package com.argus.alerts;
 
-import com.argus.ingest.Severity;
+import com.argus.alerts.dto.AlertResponse;
+import com.argus.common.NotFoundException;
+import com.argus.common.Severity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -43,8 +45,32 @@ public class AlertService {
                 });
     }
 
+    /**
+     * Looks up by id AND tenant, never by id alone. Fetching by id and checking
+     * the tenant afterwards leaks existence: a wrong-tenant request would get a
+     * different error than a genuinely missing one.
+     */
+    @Transactional
+    public AlertResponse acknowledge(UUID tenantId, UUID alertId) {
+        Alert alert = requireOwnedAlert(tenantId, alertId);
+        alert.acknowledge();
+        return AlertResponse.from(alert);
+    }
+
+    @Transactional
+    public AlertResponse resolve(UUID tenantId, UUID alertId) {
+        Alert alert = requireOwnedAlert(tenantId, alertId);
+        alert.resolve();
+        return AlertResponse.from(alert);
+    }
+
+    private Alert requireOwnedAlert(UUID tenantId, UUID alertId) {
+        return alertRepository.findByIdAndTenantId(alertId, tenantId)
+                .orElseThrow(() -> new NotFoundException("Alert", alertId));
+    }
+
     @Transactional(readOnly = true)
-    public Page<Alert> findForTenant(UUID tenantId, Pageable pageable) {
-        return alertRepository.findByTenantId(tenantId, pageable);
+    public Page<AlertResponse> findForTenant(UUID tenantId, Pageable pageable) {
+        return alertRepository.findByTenantId(tenantId, pageable).map(AlertResponse::from);
     }
 }

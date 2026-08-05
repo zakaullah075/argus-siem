@@ -2,7 +2,7 @@ package com.argus.ingest;
 
 import com.argus.common.RateLimitExceededException;
 import com.argus.ingest.dto.EventResponse;
-import com.argus.pipeline.EventIngested;
+import com.argus.common.EventIngested;
 import com.argus.ratelimit.RateLimiter;
 import com.argus.ratelimit.TenantLimits;
 import org.springframework.context.ApplicationEventPublisher;

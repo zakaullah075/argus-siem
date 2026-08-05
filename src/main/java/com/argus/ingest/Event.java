@@ -1,5 +1,7 @@
 package com.argus.ingest;
 
+import com.argus.common.Severity;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

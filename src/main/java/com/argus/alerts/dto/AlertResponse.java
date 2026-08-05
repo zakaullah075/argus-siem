@@ -2,7 +2,7 @@ package com.argus.alerts.dto;
 
 import com.argus.alerts.Alert;
 import com.argus.alerts.AlertStatus;
-import com.argus.ingest.Severity;
+import com.argus.common.Severity;
 
 import java.time.Instant;
 import java.util.UUID;

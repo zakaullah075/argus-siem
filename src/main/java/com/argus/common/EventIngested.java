@@ -1,4 +1,4 @@
-package com.argus.pipeline;
+package com.argus.common;
 
 import java.util.UUID;
 

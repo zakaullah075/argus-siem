@@ -29,6 +29,6 @@ public class AlertController {
             @PageableDefault(size = 50, sort = "lastSeenAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
 
-        return alertService.findForTenant(tenantId, pageable).map(AlertResponse::from);
+        return alertService.findForTenant(tenantId, pageable);
     }
 }

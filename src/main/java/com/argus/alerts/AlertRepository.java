@@ -14,4 +14,6 @@ public interface AlertRepository extends JpaRepository<Alert, UUID> {
                                                           AlertStatus status);
 
     Page<Alert> findByTenantId(UUID tenantId, Pageable pageable);
+
+    Optional<Alert> findByIdAndTenantId(UUID id, UUID tenantId);
 }

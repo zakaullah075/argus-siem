@@ -1,4 +1,4 @@
-package com.argus.ingest;
+package com.argus.common;
 
 public enum Severity {
     LOW,

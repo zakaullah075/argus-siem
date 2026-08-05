@@ -1,7 +1,7 @@
 package com.argus.ingest.dto;
 
 import com.argus.ingest.Event;
-import com.argus.ingest.Severity;
+import com.argus.common.Severity;
 
 import java.time.Instant;
 import java.util.UUID;

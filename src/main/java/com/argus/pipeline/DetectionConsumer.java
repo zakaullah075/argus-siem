@@ -1,5 +1,7 @@
 package com.argus.pipeline;
 
+import com.argus.common.EventIngested;
+
 import com.argus.ingest.Event;
 import com.argus.ingest.EventRepository;
 import com.argus.rules.DetectionService;
