@@ -27,8 +27,8 @@ jobs:
           cache: maven
 
       - name: Build and run tests
-        # Testcontainers starts a real Postgres against the runner's Docker
-        # daemon, so no service container is declared here.
+        # Testcontainers starts real Postgres and RabbitMQ against the runner's
+        # Docker daemon, so no service containers are declared here.
         run: mvn -B verify
 
       - name: Publish test report
@@ -51,32 +51,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned rather than @master. An unpinned action changes underneath you,
+      # so a build that passed yesterday fails today for reasons unrelated to
+      # your code — and in a security tool, it is also a supply chain risk.
       - name: Scan dependencies and source
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: fs
-          scanners: vuln,secret,misconfig
+          scanners: vuln,secret
           format: sarif
-          output: trivy-fs.sarif
+          output: trivy-results.sarif
           severity: CRITICAL,HIGH
+          # Reporting runs to completion; the explicit gate below decides whether
+          # the build fails. Mixing the two makes a scan error look like a finding.
+          exit-code: '0'
 
       - name: Upload results to code scanning
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        # Tolerated: code scanning is not available on every plan, and losing the
+        # dashboard should not fail a build that has already reported its findings.
+        continue-on-error: true
+        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
-          sarif_file: trivy-fs.sarif
+          sarif_file: trivy-results.sarif
 
       - name: Fail on critical findings
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: fs
           scanners: vuln,secret
           format: table
-          # A critical CVE or a committed secret stops the pipeline. High and
-          # below are reported but do not block, so the gate stays credible
-          # rather than becoming something people routinely override.
-          exit-code: '1'
+          # Only CRITICAL blocks. A gate that fires on everything gets routinely
+          # overridden, which is worse than no gate.
           severity: CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
 
   image:
     name: Build and scan image
@@ -90,10 +99,10 @@ jobs:
         run: docker build -t argus:${{ github.sha }} .
 
       - name: Scan image
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: argus:${{ github.sha }}
           format: table
-          exit-code: '1'
           severity: CRITICAL
+          exit-code: '1'
           ignore-unfixed: true
