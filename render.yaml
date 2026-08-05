@@ -1,0 +1,56 @@
+services:
+  - type: web
+    name: argus-siem
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    branch: main
+
+    # Render routes to whatever port the process binds. Actuator's health
+    # endpoint is deliberately the check rather than "/" — a process that is
+    # listening but cannot reach its database is not healthy.
+    healthCheckPath: /actuator/health
+
+    envVars:
+      # Secrets are entered in the Render dashboard, never in this file. sync:
+      # false tells Render to prompt for them rather than expecting a value here.
+      - key: SPRING_DATASOURCE_URL
+        sync: false
+      - key: SPRING_DATASOURCE_USERNAME
+        sync: false
+      - key: SPRING_DATASOURCE_PASSWORD
+        sync: false
+
+      - key: SPRING_RABBITMQ_HOST
+        sync: false
+      - key: SPRING_RABBITMQ_USERNAME
+        sync: false
+      - key: SPRING_RABBITMQ_PASSWORD
+        sync: false
+      - key: SPRING_RABBITMQ_VIRTUAL_HOST
+        sync: false
+
+      - key: SPRING_RABBITMQ_PORT
+        value: 5671
+      - key: SPRING_RABBITMQ_SSL_ENABLED
+        value: true
+
+      # Generated once by Render and kept. Anyone holding this can mint a token
+      # for any tenant, so it must never be the development default.
+      - key: ARGUS_JWT_SECRET
+        generateValue: true
+      - key: ARGUS_JWT_TTL_SECONDS
+        value: 3600
+
+      # Neon's free tier caps connections and the container has 512MB.
+      - key: DB_POOL_MAX
+        value: 5
+      - key: DB_POOL_MIN
+        value: 1
+
+      # Heap sized as a percentage of the container limit rather than a fixed
+      # -Xmx, so the same image is correct on a larger plan. SerialGC because
+      # G1's bookkeeping costs more than it returns below about 1GB.
+      - key: JAVA_OPTS
+        value: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError -XX:TieredStopAtLevel=1"
