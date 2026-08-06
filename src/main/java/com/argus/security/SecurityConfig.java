@@ -58,6 +58,12 @@ public class SecurityConfig {
                         // also public source, so there is nothing to protect.
                         .requestMatchers("/agent/**").permitAll()
 
+                        // The API description documents the contract, not the
+                        // data. Every endpoint it lists still enforces its own
+                        // authentication when called.
+                        .requestMatchers("/swagger-ui.html", "/swagger-ui/**",
+                                "/v3/api-docs", "/v3/api-docs/**").permitAll()
+
                         // Machine endpoints authenticate with an API key in a
                         // servlet filter that runs ahead of this chain, so they
                         // are already authenticated by the time they arrive.
