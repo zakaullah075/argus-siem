@@ -1,10 +1,61 @@
 # Argus
 
-A multi-tenant security event platform. Agents and applications push security
-events over an authenticated API; Argus normalises them, evaluates detection
-rules against the stream, and raises deduplicated alerts.
+**A multi-tenant security monitoring platform.** Servers report what happens on
+them — failed logins, privilege escalation, new sessions — and Argus decides
+which of it is worth waking someone up for.
+
+[![CI](https://github.com/zakaullah075/argus-siem/actions/workflows/ci.yml/badge.svg)](https://github.com/zakaullah075/argus-siem/actions/workflows/ci.yml)
 
 Spring Boot 3.5 · Java 21 · PostgreSQL · RabbitMQ
+
+---
+
+## Try it now
+
+**Live: [argus-siem.onrender.com](https://argus-siem.onrender.com)**
+
+Sign in to the read-only demo and press the traffic buttons to watch the
+pipeline run end to end:
+
+```
+demo@argus.dev  /  demo1234
+```
+
+Or verify it yourself in 90 seconds — no setup, standard library only:
+
+```bash
+python3 scripts/smoke.py
+```
+
+That runs 25 checks against the live deployment: idempotent ingest, alert
+folding, pagination, error shape, tenant isolation and key revocation.
+
+**API reference:** [Swagger UI](https://argus-siem.onrender.com/swagger-ui.html)
+
+> Free hosting, so the first request may take ~50 seconds to wake the instance.
+
+---
+
+## The problem it solves
+
+A single server writes thousands of log lines a day. Almost all of it is noise,
+and the few lines that matter — someone trying passwords against `root`, an
+account suddenly running commands as administrator — look exactly like the rest
+until you already know what you are looking for.
+
+Two things usually go wrong with the tools that try to help:
+
+**They alert on everything.** One brute-force attempt produces two hundred
+identical alerts, analysts start ignoring the system, and the real intrusion
+arrives inside a wall of noise nobody reads.
+
+**They lose events quietly.** A crash between accepting an event and evaluating
+it means an attack is never noticed, and nothing anywhere reports an error.
+
+Argus is built around those two failures. Repeat detections **fold into one
+alert whose count rises** rather than piling up. And an event is never
+acknowledged unless the instruction to evaluate it was committed in the same
+database transaction, so a crash cannot silently drop it.
 
 ---
 
@@ -38,11 +89,15 @@ Spring Boot 3.5 · Java 21 · PostgreSQL · RabbitMQ
 "five failed logins in five minutes" is one rule, and a burst produces one alert
 that keeps counting rather than one alert per event.
 
-## Use it
+Detection is data, not code. Rules are rows — change a threshold and behaviour
+changes with no deployment.
 
-**https://argus-siem.onrender.com**
+---
 
-Create an account, issue an API key, and point the agent at a machine:
+## Monitor a real machine
+
+The agent is a single standard-library Python file, about 200 lines, and worth
+reading before you run anything as root.
 
 ```bash
 curl -O https://argus-siem.onrender.com/agent/argus-agent.py
@@ -50,15 +105,51 @@ curl -O https://argus-siem.onrender.com/agent/argus-agent.py
 export ARGUS_API_KEY=<the key you were shown once>
 python3 argus-agent.py --test                       # prove connectivity
 
-sudo -E python3 argus-agent.py --follow /var/log/auth.log
+python3 argus-agent.py --follow /var/log/auth.log
 ```
 
-Fail an SSH login a few times and an alert appears on the dashboard. The agent is
-a single standard-library Python file — no install, ~200 lines, and worth reading
-before you run anything as root.
+Fail an SSH login a few times, or run a `sudo` command, and an alert appears on
+the dashboard.
 
-There is also a read-only demo account (`demo@argus.dev` / `demo1234`) with
-buttons that generate traffic, for looking around without connecting a machine.
+It matches six patterns out of syslog — failed passwords, invalid users,
+accepted logins, sudo escalation, session opens and PAM failures — and ignores
+everything else. Two details worth knowing:
+
+**It generates the event id itself.** A retry after a timeout resends the same
+id, and the server treats it as a duplicate rather than recording the event
+twice — which is what the idempotent ingest API exists for.
+
+**It reopens the file when the inode changes.** Without that, log rotation leaves
+the agent holding a handle to a file nobody writes to any more: it goes quiet and
+never reports an error.
+
+---
+
+## API
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| POST | `/v1/events` | API key | `202`, idempotent on client-supplied id |
+| GET | `/v1/events` | API key | Paginated, tenant-scoped |
+| GET | `/v1/alerts` | API key | Paginated, newest first |
+| POST | `/v1/auth/signup` | — | Creates a tenant, returns a JWT. Rate limited per IP. |
+| POST | `/v1/auth/login` | — | Returns a JWT |
+| POST | `/v1/management/rules` | JWT, ADMIN | |
+| GET | `/v1/management/rules` | JWT, any role | |
+| POST | `/v1/management/api-keys` | JWT, ADMIN | Key shown once |
+| GET | `/v1/management/api-keys` | JWT, any role | Never returns the hash |
+| DELETE | `/v1/management/api-keys/{id}` | JWT, ADMIN | Revokes immediately |
+| DELETE | `/v1/management/rules/{id}` | JWT, ADMIN | Soft delete — alerts reference the rule |
+| GET | `/v1/management/events` | JWT, any role | Same data as `/v1/events`, for humans |
+| POST | `/v1/management/alerts/{id}/acknowledge` | JWT, ANALYST+ | |
+| POST | `/v1/management/alerts/{id}/resolve` | JWT, ANALYST+ | |
+| GET | `/actuator/health` `/actuator/prometheus` | — | |
+
+Roles: **ADMIN** manages everything · **ANALYST** works alerts · **VIEWER** reads.
+
+Generated reference at [`/swagger-ui.html`](https://argus-siem.onrender.com/swagger-ui.html).
+
+---
 
 ## Running it locally
 
@@ -107,32 +198,13 @@ curl localhost:8080/v1/alerts -H "X-Api-Key: $KEY"
 Resending the same event `id` returns `"duplicate": true` and does not create a
 second row.
 
-## API
-
-| Method | Path | Auth | Notes |
-|---|---|---|---|
-| POST | `/v1/events` | API key | `202`, idempotent on client-supplied id |
-| GET | `/v1/events` | API key | Paginated, tenant-scoped |
-| GET | `/v1/alerts` | API key | Paginated, newest first |
-| POST | `/v1/auth/signup` | — | Creates a tenant, returns a JWT. Rate limited per IP. |
-| POST | `/v1/auth/login` | — | Returns a JWT |
-| POST | `/v1/management/rules` | JWT, ADMIN | |
-| GET | `/v1/management/rules` | JWT, any role | |
-| POST | `/v1/management/api-keys` | JWT, ADMIN | Key shown once |
-| GET | `/v1/management/api-keys` | JWT, any role | Never returns the hash |
-| DELETE | `/v1/management/api-keys/{id}` | JWT, ADMIN | Revokes immediately |
-| DELETE | `/v1/management/rules/{id}` | JWT, ADMIN | Soft delete — alerts reference the rule |
-| GET | `/v1/management/events` | JWT, any role | Same data as `/v1/events`, for humans |
-| POST | `/v1/management/alerts/{id}/acknowledge` | JWT, ANALYST+ | |
-| POST | `/v1/management/alerts/{id}/resolve` | JWT, ANALYST+ | |
-| GET | `/actuator/health` `/actuator/prometheus` | — / — | |
-
-Roles: **ADMIN** manages everything · **ANALYST** works alerts · **VIEWER** reads.
+---
 
 ## Tests
 
 ```bash
-./mvnw test
+./mvnw verify          # tests, then static analysis
+python3 scripts/smoke.py http://localhost:8080
 ```
 
 Around 120 tests across three levels:
@@ -146,9 +218,18 @@ Around 120 tests across three levels:
   enforce the `jsonb` column, the severity check constraint or the unique index,
   so it could pass while production failed.
 
+Plus **`scripts/smoke.py`**, which asserts the same guarantees against a
+*running deployment* rather than a test fixture — the difference between "it
+works on my machine" and "it works".
+
+SpotBugs runs at `verify` and fails the build on new findings. Every exclusion in
+`spotbugs-exclude.xml` is justified individually rather than blanket-suppressed.
+
 Detection assertions poll, because evaluation happens in a consumer. Where a test
 proves something did *not* happen, it waits for the queue to drain first —
 otherwise it would pass simply by checking too early.
+
+---
 
 ## Design decisions
 
@@ -187,9 +268,15 @@ hundreds of identical alerts, and analysts learn to ignore the system.
 names, so a relational comparison would order them alphabetically —
 `CRITICAL < HIGH < LOW < MEDIUM`. Wrong, and silently so.
 
+**Email is normalised with `Locale.ROOT`.** The default locale lowercases `I` to
+a dotless `ı` in Turkish, so signup would store an address login could never find.
+Static analysis found this one.
+
 **Packaging is by feature, not by layer.** `ingest/`, `rules/`, `alerts/` rather
 than `controller/`, `service/`, `repository/`. A change stays in one folder, and
 the structure describes what the system does rather than which framework it uses.
+
+---
 
 ## Known limitations
 
@@ -212,27 +299,28 @@ Stated rather than hidden:
 - **JWTs cannot be revoked before expiry.** One hour is the exposure window.
 - **Tenant rate limits are cached without invalidation** — a change takes effect
   on restart.
+- **The free-tier deployment stalls under sustained load.** One small instance
+  and a small connection pool; the fix is a paid instance and tuned pooling, not
+  a code change.
 
-## The agent
+---
 
-`src/main/resources/static/agent/argus-agent.py` — standard library only, so it
-runs anywhere with Python 3.8+.
+## What I would do next
 
-It matches six patterns out of syslog: failed passwords, invalid users, accepted
-logins, sudo escalation, session opens, and PAM failures. Everything else is
-ignored.
+In the order I would actually do it:
 
-Two details worth knowing:
+1. **Rolling counters in Redis** for detection, removing the per-rule count query
+   that becomes the bottleneck first.
+2. **Distributed rate limiting**, so the limit is real rather than per instance.
+3. **A refresh-token flow** with a revocation list, closing the one-hour window.
+4. **Alert routing** — email, Slack, webhook — because an alert nobody sees is
+   the same as no alert.
+5. **Rule backtesting**: run a candidate rule against historical events and show
+   what it would have fired on, so tuning does not require waiting for an attack.
 
-**It generates the event id itself.** A retry after a timeout resends the same
-id, and the server treats it as a duplicate rather than recording the event
-twice — which is what the idempotent ingest API exists for.
-
-**It reopens the file when the inode changes.** Without that, log rotation leaves
-the agent holding a handle to a file nobody writes to any more: it goes quiet and
-never reports an error.
+---
 
 ## Not built
 
-No UI beyond the dashboard. No machine-learning anomaly detection — rules only. No
-log-shipping agents; HTTP ingest only. No billing or signup.
+No machine-learning anomaly detection — rules only. No log-shipping agents beyond
+the Python one; HTTP ingest otherwise. No billing.
