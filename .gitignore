@@ -16,3 +16,7 @@ target/
 *.key
 
 *.log
+
+# Python bytecode from the agent
+__pycache__/
+*.pyc
