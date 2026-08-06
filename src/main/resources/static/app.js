@@ -345,6 +345,39 @@ async function refreshKeys() {
     });
 }
 
+/**
+ * Only ADMIN may create rules or issue keys. The server already enforces it, so
+ * a VIEWER submitting these forms gets a 403 and no visible explanation — the
+ * form appears to do nothing. Showing why beats a control that silently fails.
+ */
+function applyRolePermissions() {
+    const adminOnly = [
+        ['rule-form', 'Only an administrator can create detection rules.'],
+        ['key-form', 'Only an administrator can issue API keys.']
+    ];
+
+    adminOnly.forEach(([id, message]) => {
+        const form = $(id);
+        if (!form) return;
+
+        const previous = document.getElementById(`${id}-denied`);
+        if (previous) previous.remove();
+
+        if (role === 'ADMIN') {
+            form.classList.remove('hidden');
+            return;
+        }
+
+        form.classList.add('hidden');
+
+        const note = document.createElement('p');
+        note.id = `${id}-denied`;
+        note.className = 'muted';
+        note.textContent = `${message} You are signed in as ${role}.`;
+        form.parentNode.insertBefore(note, form);
+    });
+}
+
 function enterApp(email) {
     session++;
     clearRenderedData();
@@ -352,6 +385,7 @@ function enterApp(email) {
     $('app-view').classList.remove('hidden');
     $('session').classList.remove('hidden');
     $('who').textContent = `${email} · ${role}`;
+    applyRolePermissions();
     document.querySelectorAll('.host').forEach(el => el.textContent = location.origin);
     refresh().then(() => refreshKeys()).catch(() => {});
     startPolling();
