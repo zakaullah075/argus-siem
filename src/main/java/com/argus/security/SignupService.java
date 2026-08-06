@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -62,7 +63,9 @@ public class SignupService {
                                                              String callerAddress) {
         throttle(callerAddress);
 
-        String normalised = email.toLowerCase().trim();
+        // Locale.ROOT, not the default: in a Turkish locale "I" lowercases to a
+        // dotless "ı", so signup would store an address login could never find.
+        String normalised = email.toLowerCase(Locale.ROOT).trim();
 
         // Email is unique per tenant, not globally, so this cannot rely on the
         // database constraint alone — two organisations may legitimately share

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Every exclusion here is a deliberate decision, not a way to reach zero.
+    Anything not listed is treated as a defect and fails the build.
+-->
+<FindBugsFilter>
+
+    <!--
+        Storing an injected collaborator in a final field is exactly what
+        constructor injection is. SpotBugs cannot tell a Spring singleton from a
+        mutable value object, so it flags every ObjectMapper, RabbitTemplate and
+        repository the container hands us. Defensively copying a container-managed
+        bean would break it.
+    -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+
+    <!--
+        Both of these catch Exception on purpose, and say so at the call site.
+        The outbox relay must survive a single unserialisable message: leaving it
+        unpublished lets the next run retry it, while letting the exception escape
+        would stall every other tenant's events behind one poisonous row.
+    -->
+    <Match>
+        <Bug pattern="REC_CATCH_EXCEPTION"/>
+        <Or>
+            <Class name="com.argus.outbox.OutboxRelay"/>
+            <Class name="com.argus.demo.DemoDataSeeder"/>
+            <Class name="com.argus.demo.DemoSimulationController"/>
+        </Or>
+    </Match>
+
+</FindBugsFilter>

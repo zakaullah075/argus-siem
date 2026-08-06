@@ -8,6 +8,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
+
 @Service
 public class AuthenticationService {
 
@@ -32,7 +34,9 @@ public class AuthenticationService {
      */
     @Transactional(readOnly = true)
     public SessionResponse login(String email, String password) {
-        AppUser user = userRepository.findByEmail(email.toLowerCase()).orElse(null);
+        // Must match how SignupService normalised it, locale included.
+        AppUser user = userRepository.findByEmail(email.toLowerCase(Locale.ROOT))
+                .orElse(null);
 
         if (user == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
             throw new InvalidCredentialsException();
