@@ -16,6 +16,11 @@ jobs:
     name: Build and test
     runs-on: ubuntu-latest
 
+    # Explicit, so a stall fails with a clear reason rather than being killed at
+    # an ambiguous point. Testcontainers starts real Postgres and RabbitMQ, and
+    # RabbitMQ alone is allowed four minutes on a slow host.
+    timeout-minutes: 30
+
     steps:
       - uses: actions/checkout@v4
 

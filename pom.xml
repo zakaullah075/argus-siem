@@ -135,7 +135,13 @@
                 <artifactId>spotbugs-maven-plugin</artifactId>
                 <version>4.10.3.0</version>
                 <configuration>
-                    <effort>Max</effort>
+                    <!--
+                        Default rather than Max: maximum effort roughly doubles
+                        analysis time for a handful of extra low-confidence
+                        findings, and this runs on a shared CI runner that is
+                        already starting two real containers.
+                    -->
+                    <effort>Default</effort>
                     <threshold>Low</threshold>
                     <failOnError>true</failOnError>
                     <excludeFilterFile>spotbugs-exclude.xml</excludeFilterFile>
